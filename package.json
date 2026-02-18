@@ -1,0 +1,74 @@
+{
+  "name": "cognium",
+  "version": "1.0.0",
+  "description": "AI-powered static analysis CLI for detecting security vulnerabilities",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "cognium": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir dist --target node --format esm --external pino-pretty",
+    "build:standalone": "bun build src/cli.ts --compile --outfile cognium --external pino-pretty",
+    "dev": "bun run src/cli.ts",
+    "test": "bun test",
+    "clean": "rm -rf dist cognium cognium-* *.bun-build",
+    "typecheck": "tsc --noEmit",
+    "version": "node -e \"const v = require('./package.json').version; require('fs').writeFileSync('src/version.ts', '/**\\n * Version information\\n *\\n * Kept in sync with package.json via the \\`version\\` npm lifecycle script.\\n * Do not edit manually — use \\`npm version patch|minor|major\\` instead.\\n */\\nexport const version = \\x27' + v + '\\x27;\\n')\" && git add src/version.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "security",
+    "sast",
+    "static-analysis",
+    "vulnerability",
+    "cli",
+    "ai",
+    "llm",
+    "taint-analysis",
+    "code-security",
+    "devops",
+    "devsecops"
+  ],
+  "author": {
+    "name": "Cognium Labs",
+    "url": "https://cognium.dev"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cogniumhq/cognium.git"
+  },
+  "homepage": "https://cognium.dev",
+  "bugs": {
+    "url": "https://github.com/cogniumhq/cognium/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/cogniumhq"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "circle-ir": "^3.1.0",
+    "commander": "^13.0.0",
+    "chalk": "^5.4.0",
+    "ora": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "bun-types": "^1.2.0",
+    "typescript": "^5.7.0"
+  }
+}

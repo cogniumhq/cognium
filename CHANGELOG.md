@@ -1,0 +1,26 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2025-02-11
+
+### Added
+
+- **Initial Release**: AI-powered static analysis CLI
+- **Multi-language Support**: Java, JavaScript, TypeScript, Python, Rust
+- **Vulnerability Detection**: SQL Injection, XSS, Command Injection, Path Traversal, and more
+- **Output Formats**: Text, JSON, SARIF for CI/CD integration
+- **Configuration**: Project-level `cognium.config.json` support
+- **Parallel Analysis**: Multi-threaded scanning for large codebases
+- **Severity Filtering**: Filter results by severity level
+
+### Technical
+
+- Built with Bun for fast startup and standalone binary support
+- Powered by circle-ir for accurate taint analysis
+- SARIF output for GitHub/GitLab integration
+
+[1.0.0]: https://github.com/cogniumhq/cognium/releases/tag/v1.0.0
