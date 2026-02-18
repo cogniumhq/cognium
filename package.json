@@ -1,6 +1,6 @@
 {
   "name": "cognium",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "AI-powered static analysis CLI for detecting security vulnerabilities",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,7 +15,8 @@
     "clean": "rm -rf dist cognium cognium-* *.bun-build",
     "typecheck": "tsc --noEmit",
     "version": "node -e \"const v = require('./package.json').version; require('fs').writeFileSync('src/version.ts', '/**\\n * Version information\\n *\\n * Kept in sync with package.json via the \\`version\\` npm lifecycle script.\\n * Do not edit manually — use \\`npm version patch|minor|major\\` instead.\\n */\\nexport const version = \\x27' + v + '\\x27;\\n')\" && git add src/version.ts",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "release": "bash release.sh"
   },
   "keywords": [
     "security",
@@ -61,7 +62,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "circle-ir": "^3.1.0",
+    "circle-ir": "^3.1.1",
     "commander": "^13.0.0",
     "chalk": "^5.4.0",
     "ora": "^8.0.0"
