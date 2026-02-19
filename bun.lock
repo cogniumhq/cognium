@@ -5,7 +5,7 @@
       "name": "cognium",
       "dependencies": {
         "chalk": "^5.4.0",
-        "circle-ir": "^3.1.0",
+        "circle-ir": "3.2.0",
         "commander": "^13.0.0",
         "ora": "^8.0.0",
       },
@@ -29,7 +29,7 @@
 
     "chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
 
-    "circle-ir": ["circle-ir@3.1.0", "", { "dependencies": { "pino": "^10.3.0", "web-tree-sitter": "^0.26.3", "yaml": "^2.8.2" } }, "sha512-G9L1bVd1ISvrlGGl9tcuChm49c987nMyFNbRbuLlDTa9I8HHzM/E8pSGSAf54ZqL8TsosPXBuVkFO6fcPFTESA=="],
+    "circle-ir": ["circle-ir@3.2.0", "", { "dependencies": { "pino": "^10.3.0", "web-tree-sitter": "^0.26.3", "yaml": "^2.8.2" } }, "sha512-XR02sWa/v6TS+HMLAtZN81KK53poM9kp9vFQLXkXeP8oJGROZM6Ze/9pJgD+5cp0vL7lsXBwNbYfEcsIcb7Ubw=="],
 
     "cli-cursor": ["cli-cursor@5.0.0", "", { "dependencies": { "restore-cursor": "^5.0.0" } }, "sha512-aCj4O5wKyszjMmDT4tZj93kxyydN/K5zPWSCe6/0AV/AA1pqe5ZBIw0a2ZfPQV7lL5/yb5HsUreJ6UFAF1tEQw=="],
 

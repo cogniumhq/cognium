@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { readFileSync, existsSync, statSync, readdirSync } from 'fs';
 import { join, extname, resolve } from 'path';
-import { initAnalyzer, analyze, type CircleIR } from 'circle-ir';
+import { initAnalyzer, analyze, type SinkType } from 'circle-ir';
 import { formatResults, formatJSON, formatSARIF } from './formatters.js';
 import { version } from './version.js';
 
@@ -50,7 +50,6 @@ const LANG_MAP: Record<string, string> = {
 interface ScanOptions {
   language?: string;
   format: 'text' | 'json' | 'sarif';
-  ai?: boolean;
   threads: number;
   severity?: 'low' | 'medium' | 'high' | 'critical';
   output?: string;
@@ -70,6 +69,50 @@ interface ScanResult {
   }>;
   error?: string;
 }
+
+const SINK_SEVERITY: Record<SinkType, string> = {
+  sql_injection: 'critical',
+  nosql_injection: 'high',
+  command_injection: 'critical',
+  path_traversal: 'high',
+  xss: 'high',
+  xxe: 'critical',
+  deserialization: 'critical',
+  ldap_injection: 'high',
+  xpath_injection: 'high',
+  ssrf: 'high',
+  open_redirect: 'medium',
+  code_injection: 'critical',
+  log_injection: 'medium',
+  weak_random: 'low',
+  weak_hash: 'low',
+  weak_crypto: 'low',
+  insecure_cookie: 'low',
+  trust_boundary: 'medium',
+  external_taint_escape: 'medium',
+};
+
+const SINK_CWE: Record<SinkType, string> = {
+  sql_injection: 'CWE-89',
+  nosql_injection: 'CWE-943',
+  command_injection: 'CWE-78',
+  path_traversal: 'CWE-22',
+  xss: 'CWE-79',
+  xxe: 'CWE-611',
+  deserialization: 'CWE-502',
+  ldap_injection: 'CWE-90',
+  xpath_injection: 'CWE-643',
+  ssrf: 'CWE-918',
+  open_redirect: 'CWE-601',
+  code_injection: 'CWE-94',
+  log_injection: 'CWE-117',
+  weak_random: 'CWE-330',
+  weak_hash: 'CWE-327',
+  weak_crypto: 'CWE-327',
+  insecure_cookie: 'CWE-614',
+  trust_boundary: 'CWE-501',
+  external_taint_escape: 'CWE-20',
+};
 
 function detectLanguage(filePath: string): string | null {
   const ext = extname(filePath).toLowerCase();
@@ -110,10 +153,10 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
 
     const vulnerabilities = (result.taint.flows || []).map(flow => ({
       type: flow.sink_type,
-      severity: flow.severity || 'high',
+      severity: SINK_SEVERITY[flow.sink_type] ?? 'high',
       message: `${flow.sink_type} vulnerability: tainted data flows from line ${flow.source_line} to line ${flow.sink_line}`,
       line: flow.sink_line,
-      cwe: flow.cwe,
+      cwe: SINK_CWE[flow.sink_type],
     }));
 
     return { file: filePath, vulnerabilities };
@@ -244,7 +287,6 @@ program
   .description('Scan files or directories for security vulnerabilities')
   .option('-l, --language <lang>', 'Force language (java|javascript|typescript|python|rust)')
   .option('-f, --format <format>', 'Output format (text|json|sarif)', 'text')
-  .option('--ai', 'Enable AI-powered verification')
   .option('--threads <n>', 'Parallel analysis threads', '4')
   .option('--severity <level>', 'Minimum severity (low|medium|high|critical)')
   .option('--exclude-tests', 'Exclude test files and directories')
