@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-03-17
+
+### Added
+
+- **CWE Exclusion**: New `--exclude-cwe` option to filter out specific CWE types
+  - Supports single CWE: `--exclude-cwe CWE-330`
+  - Supports multiple CWEs: `--exclude-cwe CWE-330,CWE-327,CWE-20`
+  - Can be combined with `--severity` filtering
+
+### Changed
+
+- Updated help text with `--exclude-cwe` examples
+
+[1.0.6]: https://github.com/cogniumhq/cognium/compare/v1.0.5...v1.0.6
+
 ## [1.0.5] - 2026-02-18
 
 ### Changes

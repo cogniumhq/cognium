@@ -49,11 +49,12 @@ interface ScanOptions {
   language?: string;
   format: 'text' | 'json' | 'sarif';
   threads: number;
-  severity?: 'low' | 'medium' | 'high' | 'critical';
+  severity?: string;
   output?: string;
   quiet?: boolean;
   verbose?: boolean;
   excludeTests?: boolean;
+  excludeCwe?: string;
 }
 
 interface ScanResult {
@@ -279,6 +280,18 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       }
     }
 
+    // Filter by excluded CWEs if specified
+    if (options.excludeCwe) {
+      const excludedCwes = options.excludeCwe.split(',').map(c => c.trim().toUpperCase());
+      for (const result of results) {
+        result.vulnerabilities = result.vulnerabilities.filter(v => {
+          if (!v.cwe) return true; // Keep vulnerabilities without CWE
+          const cweNumber = v.cwe.toUpperCase();
+          return !excludedCwes.includes(cweNumber);
+        });
+      }
+    }
+
     // Count total vulnerabilities
     const totalVulns = results.reduce((sum, r) => sum + r.vulnerabilities.length, 0);
     const errors = results.filter(r => r.error).length;
@@ -395,11 +408,12 @@ async function main(): Promise<void> {
       language: (options.language || options.l) as string | undefined,
       format: (options.format || options.f || 'text') as 'text' | 'json' | 'sarif',
       threads: parseInt((options.threads as string) || '4', 10),
-      severity: (options.severity) as 'low' | 'medium' | 'high' | 'critical' | undefined,
+      severity: (options.severity) as string | undefined,
       output: (options.output || options.o) as string | undefined,
       quiet: options.quiet === true || options.q === true,
       verbose: options.verbose === true || options.v === true,
       excludeTests: options['exclude-tests'] === true,
+      excludeCwe: (options['exclude-cwe']) as string | undefined,
     };
 
     await runScan(targetPath, scanOptions);

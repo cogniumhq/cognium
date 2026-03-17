@@ -75,6 +75,7 @@ SCAN OPTIONS:
                                - Single level: minimum severity (e.g., "high" shows high+critical)
                                - Multiple levels: exact match (e.g., "critical,high" shows only those)
                                - Valid levels: low, medium, high, critical
+  --exclude-cwe <cwes>       Exclude specific CWEs (comma-separated, e.g., "CWE-330,CWE-327")
   --exclude-tests            Exclude test files and directories
   -o, --output <file>        Write results to file
   -q, --quiet                Suppress progress output
@@ -85,6 +86,8 @@ EXAMPLES:
   cognium scan app.java -f json -o results.json
   cognium scan . --exclude-tests --severity high
   cognium scan . --severity critical,high
+  cognium scan . --exclude-cwe CWE-330,CWE-327
+  cognium scan . --severity high --exclude-cwe CWE-601
   cognium init
 
 For more information, visit: https://cognium.dev
