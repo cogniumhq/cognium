@@ -10,6 +10,9 @@ cognium-*
 SHA256SUMS
 *.bun-build
 
+# WASM files (generated from node_modules during standalone build)
+wasm/
+
 # IDE
 .vscode/
 .idea/

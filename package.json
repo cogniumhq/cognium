@@ -9,10 +9,10 @@
   },
   "scripts": {
     "build": "bun build src/cli.ts --outdir dist --target node --format esm --external pino-pretty",
-    "build:standalone": "bun build src/cli.ts --compile --outfile cognium --external pino-pretty",
+    "build:standalone": "mkdir -p wasm && cp node_modules/circle-ir/dist/wasm/*.wasm wasm/ && bun build src/cli.ts --compile --outfile cognium --external pino-pretty",
     "dev": "bun run src/cli.ts",
     "test": "bun test",
-    "clean": "rm -rf dist cognium cognium-* *.bun-build",
+    "clean": "rm -rf dist cognium cognium-* *.bun-build wasm",
     "typecheck": "tsc --noEmit",
     "version": "node -e \"const v = require('./package.json').version; require('fs').writeFileSync('src/version.ts', '/**\\n * Version information\\n *\\n * Kept in sync with package.json via the \\`version\\` npm lifecycle script.\\n * Do not edit manually — use \\`npm version patch|minor|major\\` instead.\\n */\\nexport const version = \\x27' + v + '\\x27;\\n')\" && git add src/version.ts",
     "prepublishOnly": "bun run build",
@@ -62,10 +62,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "chalk": "^5.4.0",
-    "circle-ir": "3.2.0",
-    "commander": "^13.0.0",
-    "ora": "^8.0.0"
+    "circle-ir": "^3.8.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

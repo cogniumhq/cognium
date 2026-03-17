@@ -14,10 +14,11 @@ cognium (CLI)
 ```
 
 The CLI is a thin wrapper around `circle-ir` that provides:
-- Command-line argument parsing (Commander.js)
-- Progress indicators (ora)
-- Colored output (chalk)
+- Command-line argument parsing (zero-dependency native parser)
+- Progress indicators (zero-dependency spinner utility)
+- Colored output (zero-dependency ANSI color utilities)
 - Multiple output formats (text, JSON, SARIF)
+- Helpful vulnerability descriptions and remediation guidance
 
 ## TypeScript Configuration
 
@@ -79,21 +80,38 @@ The project has `bun test` configured but zero test files. When adding tests:
 ```
 src/
 ├── cli.ts         # Main CLI entry point
-│                  # - Command definitions (scan, init, version)
+│                  # - Command parsing and routing
 │                  # - File collection and scanning logic
-│                  # - Progress indicators with ora
+│                  # - Progress indicators
 │                  # - Exit code handling (0=clean, 1=vulns, 2=error)
+│                  # - Severity filtering (minimum or exact match)
 │
 ├── formatters.ts  # Output formatters
-│                  # - formatResults(): colored text output
+│                  # - formatResults(): colored text output with help text
 │                  # - formatJSON(): structured JSON
 │                  # - formatSARIF(): SARIF 2.1.0 for CI/CD
+│                  # - Vulnerability help text with descriptions and fixes
 │
-├── version.ts     # Version constant (must be manually updated)
+├── version.ts     # Version constant (updated via npm version)
 │
-└── index.ts       # Programmatic API exports
-                   # - Re-exports circle-ir types
-                   # - Allows use as library (not just CLI)
+├── index.ts       # Programmatic API exports
+│                  # - Re-exports circle-ir types
+│                  # - Allows use as library (not just CLI)
+│
+└── utils/
+    ├── colors.ts  # Zero-dependency ANSI color utilities
+    │              # - Bright colors for better terminal visibility
+    │              # - Simple escape sequences
+    │
+    ├── spinner.ts # Zero-dependency spinner utility
+    │              # - Unicode spinner frames
+    │              # - Cursor management
+    │              # - Success/fail/warn indicators
+    │
+    └── args.ts    # Zero-dependency argument parser
+                   # - Parses CLI arguments
+                   # - Help text generation
+                   # - Version display
 ```
 
 ## Distribution Channels
@@ -119,15 +137,18 @@ src/
 ## Key Dependencies
 
 **Runtime**:
-- `circle-ir@^3.1.0`: Core SAST engine (our library)
-- `commander@^13.0.0`: CLI argument parsing
-- `chalk@^5.4.0`: Terminal colors (ESM only)
-- `ora@^8.0.0`: Spinners/progress indicators
+- `circle-ir@^3.8.3`: Core SAST engine (high-performance taint analysis library)
 
 **Development**:
 - `typescript@^5.7.0`: Type checking only (not used for builds)
 - `@types/node@^22.0.0`: Node.js types
 - `bun-types@^1.2.0`: Bun runtime types
+
+**Zero Dependencies for UI/UX**:
+- All CLI features (colors, spinners, argument parsing) use custom zero-dependency utilities
+- Located in `src/utils/`: `colors.ts`, `spinner.ts`, `args.ts`
+- Reduces attack surface and bundle size
+- No external dependencies can break the CLI
 
 ## Documentation
 

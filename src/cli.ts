@@ -3,16 +3,14 @@
  * cognium CLI - AI-powered static analysis for security vulnerabilities
  */
 
-import { Command } from 'commander';
-import chalk from 'chalk';
-import ora from 'ora';
 import { readFileSync, existsSync, statSync, readdirSync } from 'fs';
 import { join, extname, resolve } from 'path';
 import { initAnalyzer, analyze, type SinkType } from 'circle-ir';
 import { formatResults, formatJSON, formatSARIF } from './formatters.js';
 import { version } from './version.js';
-
-const program = new Command();
+import { parseArgs, showHelp, showVersion } from './utils/args.js';
+import { spinner } from './utils/spinner.js';
+import { colors } from './utils/colors.js';
 
 // Test file/directory patterns to exclude
 const TEST_PATTERNS = [
@@ -170,28 +168,65 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
 }
 
 async function runScan(targetPath: string, options: ScanOptions): Promise<void> {
-  const spinner = options.quiet ? null : ora('Initializing analyzer...').start();
+  const spin = options.quiet ? null : spinner('Initializing analyzer...').start();
 
   try {
-    // Initialize circle-ir
-    await initAnalyzer();
+    // Initialize circle-ir with appropriate WASM paths
+    // Detect if we're running as a standalone binary (compiled with bun --compile)
+    const isStandalone = import.meta.url.includes('/$bunfs/') || !import.meta.url.includes('node_modules');
 
-    if (spinner) spinner.text = 'Collecting files...';
+    if (isStandalone) {
+      // Standalone binary: use wasm/ directory relative to binary location
+      const { fileURLToPath } = await import('url');
+      const { dirname, join } = await import('path');
+      const scriptDir = dirname(fileURLToPath(import.meta.url));
+      const wasmDir = join(scriptDir, 'wasm');
+
+      // Check if wasm directory exists
+      if (existsSync(wasmDir)) {
+        await initAnalyzer({
+          wasmPath: join(wasmDir, 'web-tree-sitter.wasm'),
+          languagePaths: {
+            java: join(wasmDir, 'tree-sitter-java.wasm'),
+            javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
+            python: join(wasmDir, 'tree-sitter-python.wasm'),
+            rust: join(wasmDir, 'tree-sitter-rust.wasm'),
+          }
+        });
+      } else {
+        // Try default initialization
+        await initAnalyzer();
+      }
+    } else {
+      // Development mode: use node_modules
+      const wasmBasePath = new URL('../node_modules/circle-ir/dist/wasm/', import.meta.url).pathname;
+      await initAnalyzer({
+        wasmPath: wasmBasePath + 'web-tree-sitter.wasm',
+        languagePaths: {
+          java: wasmBasePath + 'tree-sitter-java.wasm',
+          javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
+          python: wasmBasePath + 'tree-sitter-python.wasm',
+          rust: wasmBasePath + 'tree-sitter-rust.wasm',
+        }
+      });
+    }
+
+    if (spin) spin.text = 'Collecting files...';
 
     const absPath = resolve(targetPath);
     if (!existsSync(absPath)) {
-      if (spinner) spinner.fail(`Path not found: ${absPath}`);
+      if (spin) spin.fail(`Path not found: ${absPath}`);
       process.exit(2);
     }
 
     const files = collectFiles(absPath, options.language, options.excludeTests);
 
     if (files.length === 0) {
-      if (spinner) spinner.warn('No supported files found');
+      if (spin) spin.warn('No supported files found');
       return;
     }
 
-    if (spinner) spinner.text = `Scanning ${files.length} file(s)...`;
+    if (spin) spin.text = `Scanning ${files.length} file(s)...`;
 
     const results: ScanResult[] = [];
     let processed = 0;
@@ -213,56 +248,78 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       }
 
       processed += batch.length;
-      if (spinner) spinner.text = `Scanning... (${processed}/${files.length})`;
+      if (spin) spin.text = `Scanning... (${processed}/${files.length})`;
     }
 
-    if (spinner) spinner.succeed(`Scanned ${files.length} file(s)`);
+    if (spin) spin.succeed(`Scanned ${files.length} file(s)`);
 
     // Filter by severity if specified
     const severityOrder = ['low', 'medium', 'high', 'critical'];
-    const minSeverityIndex = options.severity ? severityOrder.indexOf(options.severity) : 0;
 
-    for (const result of results) {
-      result.vulnerabilities = result.vulnerabilities.filter(v =>
-        severityOrder.indexOf(v.severity) >= minSeverityIndex
-      );
+    if (options.severity) {
+      // Check if multiple severities are specified (comma-separated)
+      if (options.severity.includes(',')) {
+        const allowedSeverities = options.severity.split(',').map(s => s.trim().toLowerCase());
+        for (const result of results) {
+          result.vulnerabilities = result.vulnerabilities.filter(v =>
+            allowedSeverities.includes(v.severity.toLowerCase())
+          );
+        }
+      } else {
+        // Single severity: treat as minimum level
+        const minSeverityIndex = severityOrder.indexOf(options.severity.toLowerCase());
+        if (minSeverityIndex === -1) {
+          throw new Error(`Invalid severity level: ${options.severity}. Must be one of: low, medium, high, critical`);
+        }
+        for (const result of results) {
+          result.vulnerabilities = result.vulnerabilities.filter(v =>
+            severityOrder.indexOf(v.severity) >= minSeverityIndex
+          );
+        }
+      }
     }
 
     // Count total vulnerabilities
     const totalVulns = results.reduce((sum, r) => sum + r.vulnerabilities.length, 0);
     const errors = results.filter(r => r.error).length;
 
-    // Output results
-    let output: string;
-    switch (options.format) {
-      case 'json':
-        output = formatJSON(results);
-        break;
-      case 'sarif':
-        output = formatSARIF(results);
-        break;
-      default:
-        output = formatResults(results, options.verbose);
-    }
+    // Only output if there are vulnerabilities, errors, or verbose/output file requested
+    // Always output for JSON/SARIF formats (structured output expected)
+    const shouldOutput = totalVulns > 0 || errors > 0 || options.verbose || options.output || options.format !== 'text';
 
-    if (options.output) {
-      const { writeFileSync } = await import('fs');
-      writeFileSync(options.output, output);
-      console.log(chalk.green(`Results written to ${options.output}`));
-    } else {
-      console.log(output);
-    }
-
-    // Summary
-    if (!options.quiet && options.format === 'text') {
-      console.log();
-      if (totalVulns > 0) {
-        console.log(chalk.red(`Found ${totalVulns} vulnerability(ies) in ${files.length} file(s)`));
-      } else {
-        console.log(chalk.green(`No vulnerabilities found in ${files.length} file(s)`));
+    if (shouldOutput) {
+      // Output results
+      let output: string;
+      switch (options.format) {
+        case 'json':
+          output = formatJSON(results);
+          break;
+        case 'sarif':
+          output = formatSARIF(results);
+          break;
+        default:
+          output = formatResults(results, options.verbose);
       }
-      if (errors > 0) {
-        console.log(chalk.yellow(`${errors} file(s) had errors during analysis`));
+
+      if (options.output) {
+        const { writeFileSync } = await import('fs');
+        writeFileSync(options.output, output);
+        console.log(colors.green(`Results written to ${options.output}`));
+      } else if (output.trim()) {
+        console.log(output);
+      }
+
+      // Summary
+      if (!options.quiet && options.format === 'text') {
+        console.log();
+        if (totalVulns > 0) {
+          console.log(colors.red(`Found ${totalVulns} vulnerability(ies) in ${files.length} file(s)`));
+        } else if (options.verbose) {
+          console.log(colors.green(`No vulnerabilities found in ${files.length} file(s)`));
+        }
+        if (errors > 0) {
+          console.log(colors.yellow(`${errors} file(s) had errors during analysis`));
+        }
       }
     }
 
@@ -270,73 +327,97 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     process.exit(totalVulns > 0 ? 1 : 0);
 
   } catch (error) {
-    if (spinner) spinner.fail('Analysis failed');
-    console.error(chalk.red(error instanceof Error ? error.message : 'Unknown error'));
+    if (spin) spin.fail('Analysis failed');
+    console.error(colors.red(error instanceof Error ? error.message : 'Unknown error'));
     process.exit(2);
   }
 }
 
-// Main program
-program
-  .name('cognium')
-  .description('AI-powered static analysis CLI for detecting security vulnerabilities')
-  .version(version);
+// Init command handler
+async function handleInit(): Promise<void> {
+  const configPath = 'cognium.config.json';
+  if (existsSync(configPath)) {
+    console.log(colors.yellow('Configuration file already exists'));
+    return;
+  }
 
-program
-  .command('scan <path>')
-  .description('Scan files or directories for security vulnerabilities')
-  .option('-l, --language <lang>', 'Force language (java|javascript|typescript|python|rust)')
-  .option('-f, --format <format>', 'Output format (text|json|sarif)', 'text')
-  .option('--threads <n>', 'Parallel analysis threads', '4')
-  .option('--severity <level>', 'Minimum severity (low|medium|high|critical)')
-  .option('--exclude-tests', 'Exclude test files and directories')
-  .option('-o, --output <file>', 'Write results to file')
-  .option('-q, --quiet', 'Suppress progress output')
-  .option('-v, --verbose', 'Show detailed output')
-  .action(async (targetPath: string, options: any) => {
-    await runScan(targetPath, {
-      ...options,
-      threads: parseInt(options.threads, 10),
-      excludeTests: options.excludeTests,
-    });
-  });
+  const config = {
+    include: ['src/**/*.java', 'src/**/*.ts', 'src/**/*.py'],
+    exclude: ['**/test/**', '**/node_modules/**', '**/dist/**'],
+    severity: 'medium',
+    rules: {
+      'sql-injection': 'error',
+      'command-injection': 'error',
+      'xss': 'error',
+      'path-traversal': 'error',
+      'ssrf': 'warn',
+      'deserialization': 'warn',
+    },
+  };
 
-program
-  .command('init')
-  .description('Initialize a configuration file in your project')
-  .action(async () => {
-    const configPath = 'cognium.config.json';
-    if (existsSync(configPath)) {
-      console.log(chalk.yellow('Configuration file already exists'));
-      return;
+  const { writeFileSync } = await import('fs');
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
+  console.log(colors.green(`Created ${configPath}`));
+}
+
+// Main entry point
+async function main(): Promise<void> {
+  const { command, args, options } = parseArgs(process.argv.slice(2));
+
+  // Handle help flag
+  if (options.help || options.h) {
+    showHelp();
+    return;
+  }
+
+  // Handle version command or flag
+  if (command === 'version' || options.version || options.V) {
+    showVersion(version);
+    return;
+  }
+
+  // Handle init command
+  if (command === 'init') {
+    await handleInit();
+    return;
+  }
+
+  // Handle scan command
+  if (command === 'scan') {
+    if (args.length === 0) {
+      console.error(colors.red('Error: scan command requires a path argument'));
+      console.log('\nUsage: cognium scan <path> [options]');
+      process.exit(1);
     }
 
-    const config = {
-      include: ['src/**/*.java', 'src/**/*.ts', 'src/**/*.py'],
-      exclude: ['**/test/**', '**/node_modules/**', '**/dist/**'],
-      severity: 'medium',
-      rules: {
-        'sql-injection': 'error',
-        'command-injection': 'error',
-        'xss': 'error',
-        'path-traversal': 'error',
-        'ssrf': 'warn',
-        'deserialization': 'warn',
-      },
+    const targetPath = args[0];
+    const scanOptions: ScanOptions = {
+      language: (options.language || options.l) as string | undefined,
+      format: (options.format || options.f || 'text') as 'text' | 'json' | 'sarif',
+      threads: parseInt((options.threads as string) || '4', 10),
+      severity: (options.severity) as 'low' | 'medium' | 'high' | 'critical' | undefined,
+      output: (options.output || options.o) as string | undefined,
+      quiet: options.quiet === true || options.q === true,
+      verbose: options.verbose === true || options.v === true,
+      excludeTests: options['exclude-tests'] === true,
     };
 
-    const { writeFileSync } = await import('fs');
-    writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log(chalk.green(`Created ${configPath}`));
-  });
+    await runScan(targetPath, scanOptions);
+    return;
+  }
 
-program
-  .command('version')
-  .description('Display version information')
-  .action(() => {
-    console.log(`cognium v${version}`);
-    console.log(`Powered by circle-ir`);
-  });
+  // No command or unknown command
+  if (!command) {
+    showHelp();
+  } else {
+    console.error(colors.red(`Error: Unknown command '${command}'`));
+    console.log('\nRun \'cognium --help\' for usage information');
+    process.exit(1);
+  }
+}
 
-// Parse and run
-program.parse();
+// Run the CLI
+main().catch((error) => {
+  console.error(colors.red('Fatal error:'), error.message);
+  process.exit(2);
+});
