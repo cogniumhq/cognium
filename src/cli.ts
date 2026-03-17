@@ -178,10 +178,10 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
 
     if (isStandalone) {
       // Standalone binary: use wasm/ directory relative to binary location
-      const { fileURLToPath } = await import('url');
+      // Use process.execPath to get the actual binary location (not virtual bunfs path)
       const { dirname, join } = await import('path');
-      const scriptDir = dirname(fileURLToPath(import.meta.url));
-      const wasmDir = join(scriptDir, 'wasm');
+      const binaryDir = dirname(process.execPath);
+      const wasmDir = join(binaryDir, 'wasm');
 
       // Check if wasm directory exists
       if (existsSync(wasmDir)) {
