@@ -68,7 +68,7 @@ COMMANDS:
   version         Display version information
 
 SCAN OPTIONS:
-  -l, --language <lang>      Force language (java|javascript|typescript|python|rust)
+  -l, --language <lang>      Force language (bash|java|javascript|typescript|python|rust)
   -f, --format <format>      Output format (text|json|sarif) [default: text]
   --threads <n>              Parallel analysis threads [default: 4]
   --severity <level>         Filter by severity:

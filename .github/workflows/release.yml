@@ -1,0 +1,139 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-arm64
+          - os: macos-13
+            target: darwin-x64
+          - os: ubuntu-latest
+            target: linux-x64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build standalone binary
+        run: bun run build:standalone
+
+      - name: Rename binary
+        run: mv cognium cognium-${{ matrix.target }}
+
+      - name: Generate SHA256
+        run: shasum -a 256 cognium-${{ matrix.target }} > cognium-${{ matrix.target }}.sha256
+
+      - name: Create wasm archive
+        run: tar -czf cognium-${{ matrix.target }}-wasm.tar.gz wasm/
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognium-${{ matrix.target }}
+          path: |
+            cognium-${{ matrix.target }}
+            cognium-${{ matrix.target }}.sha256
+            cognium-${{ matrix.target }}-wasm.tar.gz
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -exec cp {} release-assets/ \;
+          ls -lh release-assets/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: release-assets/*
+          body: |
+            ## Installation
+
+            ### Standalone Binaries
+
+            Download the appropriate binary for your platform:
+
+            - **macOS (Apple Silicon)**: `cognium-darwin-arm64`
+            - **macOS (Intel)**: `cognium-darwin-x64`
+            - **Linux (x64)**: `cognium-linux-x64`
+
+            Each binary comes with:
+            - The executable binary
+            - SHA256 checksum file
+            - WASM files archive (required - extract next to binary)
+
+            #### Setup:
+            ```bash
+            # Download binary and wasm archive
+            curl -LO https://github.com/cogniumhq/cognium/releases/download/v${{ steps.version.outputs.VERSION }}/cognium-darwin-arm64
+            curl -LO https://github.com/cogniumhq/cognium/releases/download/v${{ steps.version.outputs.VERSION }}/cognium-darwin-arm64-wasm.tar.gz
+
+            # Verify checksum (optional)
+            curl -LO https://github.com/cogniumhq/cognium/releases/download/v${{ steps.version.outputs.VERSION }}/cognium-darwin-arm64.sha256
+            shasum -a 256 -c cognium-darwin-arm64.sha256
+
+            # Extract WASM files
+            tar -xzf cognium-darwin-arm64-wasm.tar.gz
+
+            # Make executable
+            chmod +x cognium-darwin-arm64
+            mv cognium-darwin-arm64 cognium
+
+            # Run (ensure wasm/ directory is in same folder as binary)
+            ./cognium --version
+            ```
+
+            ### Via npm
+            ```bash
+            npm install -g cognium@${{ steps.version.outputs.VERSION }}
+            ```
+
+            ### Via Homebrew (macOS)
+            ```bash
+            brew install cogniumhq/tap/cognium
+            ```
+
+            ## Changelog
+
+            See [CHANGELOG.md](https://github.com/cogniumhq/cognium/blob/main/CHANGELOG.md) for details.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

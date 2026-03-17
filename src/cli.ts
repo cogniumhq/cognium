@@ -43,6 +43,8 @@ const LANG_MAP: Record<string, string> = {
   '.tsx': 'typescript',
   '.py': 'python',
   '.rs': 'rust',
+  '.sh': 'bash',
+  '.bash': 'bash',
 };
 
 interface ScanOptions {
@@ -188,6 +190,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
         await initAnalyzer({
           wasmPath: join(wasmDir, 'web-tree-sitter.wasm'),
           languagePaths: {
+            bash: join(wasmDir, 'tree-sitter-bash.wasm'),
             java: join(wasmDir, 'tree-sitter-java.wasm'),
             javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
             python: join(wasmDir, 'tree-sitter-python.wasm'),
@@ -204,6 +207,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       await initAnalyzer({
         wasmPath: wasmBasePath + 'web-tree-sitter.wasm',
         languagePaths: {
+          bash: wasmBasePath + 'tree-sitter-bash.wasm',
           java: wasmBasePath + 'tree-sitter-java.wasm',
           javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
           python: wasmBasePath + 'tree-sitter-python.wasm',
