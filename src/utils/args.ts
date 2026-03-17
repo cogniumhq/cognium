@@ -96,4 +96,5 @@ For more information, visit: https://cognium.dev
 
 export function showVersion(version: string): void {
   console.log(`cognium v${version}`);
+  console.log(`Powered by Cognium Labs`);
 }
