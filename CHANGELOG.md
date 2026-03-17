@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-03-17
+
+### Fixed
+
+- **WASM Path Resolution**: Enhanced standalone binary to search for WASM files in multiple locations:
+  - Next to the binary executable
+  - Current working directory
+  - Parent directory of binary
+- **Better Error Messages**: Added detailed error message when WASM files cannot be found, showing all searched locations
+- Fixes "ENOENT: no such file or directory, open 'wasm/tree-sitter-*.wasm'" errors when running binary from different directories
+
+### Changed
+
+- Version output now shows "Powered by Cognium Labs" instead of "Powered by circle-ir"
+
+[1.0.9]: https://github.com/cogniumhq/cognium/compare/v1.0.8...v1.0.9
+
 ## [1.0.8] - 2026-03-17
 
 ### Added

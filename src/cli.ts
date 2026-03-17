@@ -179,14 +179,27 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     const isStandalone = import.meta.url.includes('/$bunfs/') || !import.meta.url.includes('node_modules');
 
     if (isStandalone) {
-      // Standalone binary: use wasm/ directory relative to binary location
-      // Use process.execPath to get the actual binary location (not virtual bunfs path)
+      // Standalone binary: look for wasm/ directory in multiple locations
       const { dirname, join } = await import('path');
       const binaryDir = dirname(process.execPath);
-      const wasmDir = join(binaryDir, 'wasm');
+      const cwd = process.cwd();
 
-      // Check if wasm directory exists
-      if (existsSync(wasmDir)) {
+      // Try multiple locations for wasm directory
+      const wasmLocations = [
+        join(binaryDir, 'wasm'),           // Next to binary
+        join(cwd, 'wasm'),                 // Current directory
+        join(binaryDir, '..', 'wasm'),     // Parent of binary directory
+      ];
+
+      let wasmDir: string | null = null;
+      for (const location of wasmLocations) {
+        if (existsSync(location) && existsSync(join(location, 'web-tree-sitter.wasm'))) {
+          wasmDir = location;
+          break;
+        }
+      }
+
+      if (wasmDir) {
         await initAnalyzer({
           wasmPath: join(wasmDir, 'web-tree-sitter.wasm'),
           languagePaths: {
@@ -198,8 +211,17 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
           }
         });
       } else {
-        // Try default initialization
-        await initAnalyzer();
+        // WASM files not found
+        if (spin) spin.fail('WASM files not found');
+        console.error(colors.red('\nError: WASM files not found'));
+        console.error('The cognium binary requires WASM files to be present in a "wasm/" directory.');
+        console.error('\nExpected locations (searched in order):');
+        for (const loc of wasmLocations) {
+          console.error(`  - ${loc}`);
+        }
+        console.error('\nPlease ensure the wasm/ directory is located next to the binary or in your current directory.');
+        console.error('Download from: https://github.com/cogniumhq/cognium/releases');
+        process.exit(2);
       }
     } else {
       // Development mode: use node_modules
