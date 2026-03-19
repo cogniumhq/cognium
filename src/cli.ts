@@ -121,6 +121,17 @@ function detectLanguage(filePath: string): string | null {
   return LANG_MAP[ext] || null;
 }
 
+function normalizeLanguage(language: string): string {
+  return language.trim().toLowerCase();
+}
+
+function fileMatchesLanguage(filePath: string, language?: string): boolean {
+  const detected = detectLanguage(filePath);
+  if (!detected) return false;
+  if (!language) return true;
+  return detected === normalizeLanguage(language);
+}
+
 async function collectFiles(targetPath: string, language?: string, excludeTests = false): Promise<string[]> {
   const files: string[] = [];
   const pathStat = await stat(targetPath);
@@ -130,8 +141,7 @@ async function collectFiles(targetPath: string, language?: string, excludeTests 
     if (excludeTests && isTestFile(targetPath)) {
       return files;
     }
-    const lang = language || detectLanguage(targetPath);
-    if (lang) {
+    if (fileMatchesLanguage(targetPath, language)) {
       files.push(targetPath);
     }
   } else if (pathStat.isDirectory()) {
@@ -439,7 +449,7 @@ async function main(): Promise<void> {
 
     const targetPath = args[0];
     const scanOptions: ScanOptions = {
-      language: (options.language || options.l) as string | undefined,
+      language: (options.language || options.l) ? normalizeLanguage((options.language || options.l) as string) : undefined,
       format: (options.format || options.f || 'text') as 'text' | 'json' | 'sarif',
       threads: parseInt((options.threads as string) || '4', 10),
       severity: (options.severity) as string | undefined,
