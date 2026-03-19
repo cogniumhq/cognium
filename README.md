@@ -54,7 +54,7 @@ Scan files or directories for security vulnerabilities.
 cognium scan <path> [options]
 
 Options:
-  -l, --language <lang>      Force language (java|javascript|typescript|python|rust)
+  -l, --language <lang>      Scan only files for language (java|javascript|typescript|python|rust|bash)
   -f, --format <format>      Output format (text|json|sarif) [default: text]
   --threads <n>              Parallel analysis threads [default: 4]
   --severity <level>         Filter by severity:

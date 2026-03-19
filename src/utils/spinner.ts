@@ -13,13 +13,23 @@ export class Spinner {
   private frameIndex = 0;
   private intervalId?: NodeJS.Timeout;
   private isSpinning = false;
+  private enabled: boolean;
 
   constructor(text: string) {
     this._text = text;
+    // Only animate when attached to an interactive terminal.
+    // When output is piped (CI, file redirects), spinners tend to look like "nothing happened"
+    // or produce unreadable control characters.
+    this.enabled = Boolean(process.stdout.isTTY);
+  }
+
+  private render(frame: string): void {
+    process.stdout.write(`\r\x1b[K${frame} ${this._text}`);
   }
 
   start(): this {
     if (this.isSpinning) return this;
+    if (!this.enabled) return this;
 
     this.isSpinning = true;
     this.frameIndex = 0;
@@ -27,12 +37,17 @@ export class Spinner {
     // Hide cursor
     process.stdout.write('\x1b[?25l');
 
+    // Render immediately so users see *something* even if the event loop is blocked
+    // by synchronous work right after `start()`.
+    this.render(SPINNER_FRAMES[this.frameIndex]);
+
     this.intervalId = setInterval(() => {
-      const frame = SPINNER_FRAMES[this.frameIndex];
+      // Advance frame after the initial render.
       this.frameIndex = (this.frameIndex + 1) % SPINNER_FRAMES.length;
+      const frame = SPINNER_FRAMES[this.frameIndex];
 
       // Clear line and write spinner
-      process.stdout.write(`\r\x1b[K${frame} ${this._text}`);
+      this.render(frame);
     }, 80);
 
     return this;
@@ -78,6 +93,11 @@ export class Spinner {
 
   set text(value: string) {
     this._text = value;
+    // Ensure progress messages are visible even when interval ticks are delayed
+    // by CPU-heavy synchronous tasks.
+    if (this.isSpinning && this.enabled) {
+      this.render(SPINNER_FRAMES[this.frameIndex]);
+    }
   }
 
   get text(): string {
