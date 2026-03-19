@@ -4,13 +4,14 @@
  */
 
 import { readFileSync, existsSync, statSync, readdirSync } from 'fs';
-import { join, extname, resolve } from 'path';
+import { join, extname, resolve, basename } from 'path';
 import { initAnalyzer, analyze, type SinkType } from 'circle-ir';
 import { formatResults, formatJSON, formatSARIF } from './formatters.js';
 import { version } from './version.js';
 import { parseArgs, showHelp, showVersion } from './utils/args.js';
 import { spinner } from './utils/spinner.js';
 import { colors } from './utils/colors.js';
+import { createProgressReporter, formatProgressBar } from './utils/prograss_tarcker.js';
 
 // Test file/directory patterns to exclude
 const TEST_PATTERNS = [
@@ -171,12 +172,23 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
 }
 
 async function runScan(targetPath: string, options: ScanOptions): Promise<void> {
-  const spin = options.quiet ? null : spinner('Initializing analyzer...').start();
+  // When output is structured (JSON/SARIF) or written to a file, keep stdout clean:
+  // show progress on stderr instead of stdout to avoid corrupting machine-readable output.
+  const progressOnStderr = options.format !== 'text' || Boolean(options.output);
+
+  const spin =
+    options.quiet || progressOnStderr || !process.stdout.isTTY
+      ? null
+      : spinner('Initializing analyzer...').start();
+
+  const reportProgress = createProgressReporter({ quiet: options.quiet, spinner: spin });
 
   try {
     // Initialize circle-ir with appropriate WASM paths
     // Detect if we're running as a standalone binary (compiled with bun --compile)
-    const isStandalone = import.meta.url.includes('/$bunfs/') || !import.meta.url.includes('node_modules');
+    // Note: `node dist/cli.js` is *not* standalone; it should load WASM from `node_modules/`.
+    // Bun-compiled binaries embed code under `/$bunfs/` and need an external `wasm/` directory.
+    const isStandalone = import.meta.url.includes('/$bunfs/');
 
     if (isStandalone) {
       // Standalone binary: look for wasm/ directory in multiple locations
@@ -206,6 +218,8 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
             bash: join(wasmDir, 'tree-sitter-bash.wasm'),
             java: join(wasmDir, 'tree-sitter-java.wasm'),
             javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
+            // circle-ir currently uses the JavaScript parser for TypeScript
+            typescript: join(wasmDir, 'tree-sitter-javascript.wasm'),
             python: join(wasmDir, 'tree-sitter-python.wasm'),
             rust: join(wasmDir, 'tree-sitter-rust.wasm'),
           }
@@ -232,13 +246,15 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
           bash: wasmBasePath + 'tree-sitter-bash.wasm',
           java: wasmBasePath + 'tree-sitter-java.wasm',
           javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
+          // circle-ir currently uses the JavaScript parser for TypeScript
+          typescript: wasmBasePath + 'tree-sitter-javascript.wasm',
           python: wasmBasePath + 'tree-sitter-python.wasm',
           rust: wasmBasePath + 'tree-sitter-rust.wasm',
         }
       });
     }
 
-    if (spin) spin.text = 'Collecting files...';
+    reportProgress('Collecting files...');
 
     const absPath = resolve(targetPath);
     if (!existsSync(absPath)) {
@@ -253,7 +269,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       return;
     }
 
-    if (spin) spin.text = `Scanning ${files.length} file(s)...`;
+    reportProgress(`Scanning ${files.length} file(s)...`);
 
     const results: ScanResult[] = [];
     let processed = 0;
@@ -275,10 +291,20 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       }
 
       processed += batch.length;
-      if (spin) spin.text = `Scanning... (${processed}/${files.length})`;
+      const pct = Math.floor((processed / files.length) * 100);
+      const bar = formatProgressBar(processed, files.length);
+      const remaining = files.length - processed;
+      const last = batch.length > 0 ? basename(batch[batch.length - 1]!) : '';
+      reportProgress(
+        `Scanning ${bar} ${processed}/${files.length} (${pct}%) - ${remaining} left${last ? ` • ${last}` : ''}`
+      );
     }
 
-    if (spin) spin.succeed(`Scanned ${files.length} file(s)`);
+    if (spin) {
+      spin.succeed(`Scanned ${files.length} file(s)`);
+    } else {
+      reportProgress(`Scanned ${files.length} file(s)`, true);
+    }
 
     // Filter by severity if specified
     const severityOrder = ['low', 'medium', 'high', 'critical'];
