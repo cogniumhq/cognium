@@ -39,7 +39,3 @@ bun.lockb
 
 # Claude Code local settings
 .claude/settings.local.json
-
-# Homebrew (not currently supported)
-Formula/
-HOMEBREW.md
