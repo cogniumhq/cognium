@@ -216,7 +216,7 @@ Cognium is distributed via Homebrew through a custom tap at `cogniumhq/homebrew-
 - Use `async/await` for asynchronous operations
 - Prefer functional array methods (map, filter, reduce)
 - Error handling: try/catch with appropriate exit codes
-- Use chalk for all colored output
-- Use ora spinners for long-running operations
+- Use zero-dependency color utilities from `src/utils/colors.ts` for all colored output
+- Use zero-dependency spinner from `src/utils/spinner.ts` for long-running operations
 - File paths: use Node.js path module for cross-platform compatibility
 - Avoid process.exit() except in CLI entry point

@@ -1,6 +1,6 @@
 # cognium
 
-AI-powered static analysis CLI for detecting security vulnerabilities in your code.
+Semantic static analysis engine for detecting security vulnerabilities via taint tracking.
 
 ## Installation
 
@@ -302,9 +302,19 @@ Cognium is built for speed:
 - **Core Engine**: [circle-ir](https://github.com/cogniumhq/circle-ir) - High-performance SAST library
 - **Dependencies**: Only 1 runtime dependency (circle-ir)
 
+## LLM Enhancement (Optional)
+
+The core static analysis engine runs deterministically without any LLM. Optionally, you can enable LLM-based discovery modes for enhanced detection:
+
+- **Discovery Mode**: LLM reads source code to locate vulnerable methods from scratch
+- **Verification Mode**: Confirms whether static findings are actually exploitable
+- **Semantic Extraction**: Extracts design intent for automated gap analysis
+
+For details on LLM integration and benchmark improvements (42.5% → 78.3% on CWE-Bench with Claude Opus), visit [cognium.net](https://cognium.net).
+
 ## Benchmark Results
 
-All scores below are for circle-ir static analysis (no LLM):
+**All scores below are from the static analysis engine** — fully deterministic, no LLM required:
 
 | Benchmark | Score | Details |
 |-----------|-------|---------|
@@ -312,6 +322,27 @@ All scores below are for circle-ir static analysis (no LLM):
 | Juliet Test Suite | +100% | 156/156 test cases, 9 CWEs |
 | SecuriBench Micro | 97.7% TPR | 105/108 vulns detected, 6.7% FPR |
 | CWE-Bench-Java | 42.5% | 51/120 real-world CVEs |
+
+### Reproducing Benchmarks
+
+The benchmark scores are verifiable and reproducible:
+
+```bash
+# Install cognium
+npm install -g cognium
+
+# Clone benchmark repositories
+git clone https://github.com/OWASP-Benchmark/BenchmarkJava
+git clone https://github.com/juliet-test-suite/juliet-test-suite-for-java
+git clone https://github.com/CWE-Bench/cwe-bench-java
+
+# Run scans
+cognium scan BenchmarkJava/src --format json -o owasp-results.json
+cognium scan juliet-test-suite-for-java --format json -o juliet-results.json
+cognium scan cwe-bench-java --format json -o cwe-bench-results.json
+```
+
+For detailed benchmark methodology and comparison with other tools, see [cognium.dev](https://cognium.dev).
 
 ## Links
 

@@ -1,7 +1,7 @@
 {
   "name": "cognium",
   "version": "1.0.9",
-  "description": "AI-powered static analysis CLI for detecting security vulnerabilities",
+  "description": "Semantic static analysis engine for detecting security vulnerabilities via taint tracking",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -24,12 +24,14 @@
     "static-analysis",
     "vulnerability",
     "cli",
-    "ai",
-    "llm",
     "taint-analysis",
+    "dataflow-analysis",
+    "semantic-analysis",
     "code-security",
     "devops",
-    "devsecops"
+    "devsecops",
+    "cwe",
+    "owasp"
   ],
   "author": {
     "name": "Cognium Labs",
