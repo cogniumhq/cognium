@@ -10,12 +10,6 @@ Semantic static analysis engine for detecting security vulnerabilities via taint
 npm install -g cognium
 ```
 
-### Homebrew (macOS/Linux)
-
-```bash
-brew install cogniumhq/tap/cognium
-```
-
 ### Standalone binary
 
 Download from [GitHub Releases](https://github.com/cogniumhq/cognium/releases).

@@ -124,14 +124,10 @@ src/
 - Requires Node.js >= 18.0.0
 - Built with `bun run build`
 
-### 2. Homebrew
-- Standalone binary: `./cognium`
-- No runtime dependencies
-- Built with `bun run build:standalone`
-- Tap: `cogniumhq/tap/cognium`
-
-### 3. GitHub Releases
+### 2. GitHub Releases
 - Standalone binaries for multiple platforms
+- Built with `bun run build:standalone`
+- No runtime dependencies
 - Source code archives
 
 ## Key Dependencies
@@ -154,7 +150,7 @@ src/
 
 ### README.md (User-Facing)
 Comprehensive end-user documentation including:
-- Installation instructions (npm, Homebrew, standalone)
+- Installation instructions (npm, standalone binary)
 - Command reference with examples
 - Configuration options
 - CI/CD integration examples
@@ -168,25 +164,6 @@ Developer guidance for Claude Code when working on this codebase.
 
 ### CHANGELOG.md
 Keep a Changelog format tracking all releases.
-
-### HOMEBREW.md
-Complete guide for setting up and maintaining the Homebrew tap distribution.
-
-## Homebrew Distribution
-
-Cognium is distributed via Homebrew through a custom tap at `cogniumhq/homebrew-tap`.
-
-**Tap Repository**: Separate GitHub repository containing only the formula file:
-- Repository: `https://github.com/cogniumhq/homebrew-tap`
-- Formula: `Formula/cognium.rb` or `cognium.rb`
-- Users install with: `brew install cogniumhq/tap/cognium`
-
-**Formula Location in This Repo**: `Formula/cognium.rb`
-- This is a reference/template formula
-- The actual formula is maintained in the separate homebrew-tap repository
-- Must be updated with SHA256 hashes after each release
-
-**See HOMEBREW.md** for complete setup instructions, release process, and automation.
 
 ## Development Workflow
 
@@ -207,9 +184,7 @@ Cognium is distributed via Homebrew through a custom tap at `cogniumhq/homebrew-
    - Build binaries for all platforms (macOS arm64/x64, Linux arm64/x64)
    - Generate SHA256 hashes for all binaries
    - Create GitHub release with tag and upload binaries
-   - Update Homebrew formula in homebrew-tap repository with new SHA256s
    - Publish to npm with `npm publish`
-   - See HOMEBREW.md for detailed Homebrew release steps
 
 ## Code Style Notes
 

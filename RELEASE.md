@@ -144,67 +144,12 @@ npm publish
 - [ ] Package visible at https://www.npmjs.com/package/cognium
 - [ ] Test install: `npm install -g cognium`
 
-## Homebrew Formula Update
-
-### 1. Clone homebrew-tap repository
-```bash
-git clone https://github.com/cogniumhq/homebrew-tap.git
-cd homebrew-tap
-```
-
-### 2. Update Formula/cognium.rb
-
-Extract SHA256 hashes from the files you created:
-```bash
-cat cognium-darwin-arm64.sha256
-cat cognium-darwin-x64.sha256
-cat cognium-linux-x64.sha256
-cat cognium-linux-arm64.sha256
-```
-
-Edit `Formula/cognium.rb` (or `cognium.rb`):
-- [ ] Update `version` to "X.Y.Z"
-- [ ] Update URL tags from `vX.Y.Z-OLD` to `vX.Y.Z`
-- [ ] Update SHA256 hash for darwin-arm64
-- [ ] Update SHA256 hash for darwin-x64
-- [ ] Update SHA256 hash for linux-arm64
-- [ ] Update SHA256 hash for linux-x64
-
-### 3. Commit and Push
-```bash
-git add Formula/cognium.rb  # or cognium.rb
-git commit -m "Update cognium to vX.Y.Z"
-git push origin main
-```
-
-- [ ] Formula updated and pushed
-
-### 4. Test Homebrew Installation
-
-```bash
-# Uninstall old version if present
-brew uninstall cognium
-
-# Install from tap
-brew install cogniumhq/tap/cognium
-
-# Verify
-cognium version
-
-# Should output: cognium vX.Y.Z
-```
-
-- [ ] Homebrew installation successful
-- [ ] Correct version displayed
-- [ ] Binary runs without errors
-
 ## Post-Release Verification
 
 - [ ] npm package: `npm view cognium version` shows new version
-- [ ] Homebrew: `brew info cogniumhq/tap/cognium` shows new version
 - [ ] GitHub release visible and complete
 - [ ] Test fresh install: `npx cognium version`
-- [ ] Test Homebrew install: `brew install cogniumhq/tap/cognium`
+- [ ] Test standalone binary download and execution
 
 ## Communication
 
@@ -218,30 +163,19 @@ cognium version
 ### Cross-compilation fails
 - Use GitHub Actions for multi-platform builds
 - Build on native machines/VMs
-- See HOMEBREW.md for GitHub Actions example
-
-### SHA256 mismatch in Homebrew
-- Verify you're using the correct binary file
-- Regenerate SHA256: `shasum -a 256 <file>`
-- Ensure formula URLs point to correct release
 
 ### npm publish fails
 - Check you're logged in: `npm whoami`
 - Verify package name availability
 - Check npm registry status: https://status.npmjs.org/
 
-### Homebrew installation fails
-- Wait a few minutes for GitHub CDN to propagate
-- Check formula syntax: `brew audit --strict Formula/cognium.rb`
-- Verify release binaries are publicly accessible
-- Check release URLs in formula match GitHub release
+### Binary not executable
+- Check file permissions after download
+- Verify SHA256 hash matches release
 
 ## Automation (Future)
 
 Consider implementing GitHub Actions for:
 - Automatic cross-platform builds on tag push
 - Automatic GitHub release creation
-- Automatic Homebrew formula PR
 - Automatic npm publication
-
-See HOMEBREW.md for example GitHub Actions workflow.
