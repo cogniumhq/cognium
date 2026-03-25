@@ -82,14 +82,17 @@ src/
 ├── cli.ts         # Main CLI entry point
 │                  # - Command parsing and routing
 │                  # - File collection and scanning logic
+│                  # - Auto-detects directory → analyzeProject(), file → analyze()
+│                  # - scanProject(): wraps analyzeProject() for directory scans
 │                  # - Progress indicators
-│                  # - Exit code handling (0=clean, 1=vulns, 2=error)
-│                  # - Severity filtering (minimum or exact match)
+│                  # - Exit code handling (0=clean, 1=vulns or cross-file paths, 2=error)
+│                  # - Severity filtering (minimum or exact match, applied to taint paths too)
 │
 ├── formatters.ts  # Output formatters
-│                  # - formatResults(): colored text output with help text
-│                  # - formatJSON(): structured JSON
-│                  # - formatSARIF(): SARIF 2.1.0 for CI/CD
+│                  # - formatResults(): colored text output with help text + cross-file section
+│                  # - formatJSON(): structured JSON with cross_file_taint_paths + cross_file_calls
+│                  # - formatSARIF(): SARIF 2.1.0 with relatedLocations for cross-file paths
+│                  # - formatCrossFilePaths(): renders hop chain, source/sink, confidence, fix hint
 │                  # - Vulnerability help text with descriptions and fixes
 │
 ├── version.ts     # Version constant (updated via npm version)
@@ -130,10 +133,68 @@ src/
 - No runtime dependencies
 - Source code archives
 
+## Circle-IR Integration
+
+### Directory vs Single-File Auto-Detection
+
+`cognium scan <path>` auto-detects whether `<path>` is a directory or file:
+
+- **Directory** → calls `analyzeProject()` via `scanProject()` in `cli.ts`
+  - All files in the directory are passed together for cross-file taint analysis
+  - Returns `ProjectAnalysis` with `taint_paths: TaintPath[]` (cross-file) + per-file `files: FileAnalysis[]`
+  - Cross-file taint paths appear as an additional section in all output formats (text, JSON, SARIF)
+
+- **Single file** → calls `analyze()` per-file (original behavior, unchanged)
+
+No new CLI flags or commands — behavior is purely automatic based on the input path.
+
+### Key Types from circle-ir (v3.9.1)
+
+```typescript
+// Per-file result (from analyze())
+CircleIR.findings?: SastFinding[]   // quality + reliability findings from 11-pass pipeline
+
+// SastFinding interface (SARIF 2.1.0-aligned)
+interface SastFinding {
+  id: string;           // e.g. "dead-code-42"
+  rule_id: string;      // e.g. "dead-code" | "missing-await" | "n-plus-one"
+  category: PassCategory; // 'security' | 'reliability' | 'performance' | 'maintainability'
+  severity: string;     // 'critical' | 'high' | 'medium' | 'low'
+  level: SarifLevel;    // 'error' | 'warning' | 'note'
+  message: string;
+  file: string;
+  line: number;
+  cwe?: string;         // e.g. "CWE-561"
+  fix?: string;         // instance-specific remediation hint
+}
+
+// Cross-file result (from analyzeProject())
+ProjectAnalysis.taint_paths: TaintPath[]     // cross-file taint flows
+ProjectAnalysis.cross_file_calls: CrossFileCall[]  // resolved inter-file method calls
+
+// CrossFileData (cognium internal, passed through cli.ts → formatters.ts)
+interface CrossFileData {
+  taintPaths: TaintPath[];
+  crossFileCalls: CrossFileCall[];
+}
+```
+
+### Output Format Additions (cross-file)
+
+- **Text**: `formatCrossFilePaths()` appended after per-file section
+- **JSON**: `cross_file_taint_paths`, `cross_file_calls`, `summary.crossFileTaintPaths` added
+- **SARIF**: cross-file rules (`cross-file-{sink_type}`) + results with `relatedLocations` pointing to source file
+
+### `SINK_SEVERITY` Duplication
+
+`cli.ts` and `formatters.ts` each maintain their own `SINK_SEVERITY: Record<SinkType, string>` map. This is intentional — `cli.ts` doesn't export it and the module boundary is clean.
+
+---
+
 ## Key Dependencies
 
 **Runtime**:
-- `circle-ir@^3.8.3`: Core SAST engine (high-performance taint analysis library)
+- `circle-ir@^3.9.1`: Core SAST engine (high-performance taint analysis library, v3.9.1 exports `analyzeProject()`)
 
 **Development**:
 - `typescript@^5.7.0`: Type checking only (not used for builds)

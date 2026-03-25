@@ -5,7 +5,11 @@
 
 import { readFileSync, existsSync, statSync, readdirSync } from 'fs';
 import { join, extname, resolve } from 'path';
-import { initAnalyzer, analyze, type SinkType } from 'circle-ir';
+import {
+  initAnalyzer, analyze, analyzeProject,
+  type SinkType, type SastFinding, type SupportedLanguage,
+  type TaintPath, type CrossFileCall,
+} from 'circle-ir';
 import { formatResults, formatJSON, formatSARIF } from './formatters.js';
 import { version } from './version.js';
 import { parseArgs, showHelp, showVersion } from './utils/args.js';
@@ -67,8 +71,15 @@ interface ScanResult {
     message: string;
     line: number;
     cwe?: string;
+    /** Instance-specific fix suggestion forwarded from SastFinding.fix */
+    fix?: string;
   }>;
   error?: string;
+}
+
+interface CrossFileData {
+  taintPaths: TaintPath[];
+  crossFileCalls: CrossFileCall[];
 }
 
 const SINK_SEVERITY: Record<SinkType, string> = {
@@ -152,13 +163,26 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
     const code = readFileSync(filePath, 'utf-8');
     const result = await analyze(code, filePath, language as any);
 
-    const vulnerabilities = (result.taint.flows || []).map(flow => ({
+    // Security findings from taint flows
+    const vulnerabilities: ScanResult['vulnerabilities'] = (result.taint.flows || []).map(flow => ({
       type: flow.sink_type,
       severity: SINK_SEVERITY[flow.sink_type] ?? 'high',
       message: `${flow.sink_type} vulnerability: tainted data flows from line ${flow.source_line} to line ${flow.sink_line}`,
       line: flow.sink_line,
       cwe: SINK_CWE[flow.sink_type],
     }));
+
+    // Quality findings from analysis passes (dead-code, missing-await, n-plus-one, etc.)
+    for (const finding of (result.findings ?? []) as SastFinding[]) {
+      vulnerabilities.push({
+        type: finding.rule_id,
+        severity: finding.severity,
+        message: finding.message,
+        line: finding.line,
+        cwe: finding.cwe,
+        fix: finding.fix,
+      });
+    }
 
     return { file: filePath, vulnerabilities };
   } catch (error) {
@@ -168,6 +192,48 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
+}
+
+async function scanProject(
+  files: string[],
+  language: string | undefined,
+): Promise<{ results: ScanResult[]; crossFileData: CrossFileData }> {
+  const filesWithCode = files.map(f => ({
+    code: readFileSync(f, 'utf-8'),
+    filePath: f,
+    language: (language || detectLanguage(f)) as SupportedLanguage,
+  }));
+
+  const projectResult = await analyzeProject(filesWithCode);
+
+  const results: ScanResult[] = projectResult.files.map(({ file, analysis }) => {
+    const vulnerabilities: ScanResult['vulnerabilities'] = (analysis.taint.flows || []).map(flow => ({
+      type: flow.sink_type,
+      severity: SINK_SEVERITY[flow.sink_type] ?? 'high',
+      message: `${flow.sink_type} vulnerability: tainted data flows from line ${flow.source_line} to line ${flow.sink_line}`,
+      line: flow.sink_line,
+      cwe: SINK_CWE[flow.sink_type],
+    }));
+    for (const finding of (analysis.findings ?? []) as SastFinding[]) {
+      vulnerabilities.push({
+        type: finding.rule_id,
+        severity: finding.severity,
+        message: finding.message,
+        line: finding.line,
+        cwe: finding.cwe,
+        fix: finding.fix,
+      });
+    }
+    return { file, vulnerabilities };
+  });
+
+  return {
+    results,
+    crossFileData: {
+      taintPaths: projectResult.taint_paths,
+      crossFileCalls: projectResult.cross_file_calls,
+    },
+  };
 }
 
 async function runScan(targetPath: string, options: ScanOptions): Promise<void> {
@@ -253,29 +319,39 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       return;
     }
 
-    if (spin) spin.text = `Scanning ${files.length} file(s)...`;
+    let results: ScanResult[];
+    let crossFileData: CrossFileData | undefined;
 
-    const results: ScanResult[] = [];
-    let processed = 0;
+    if (statSync(absPath).isDirectory()) {
+      if (spin) spin.text = `Running project analysis on ${files.length} file(s)...`;
+      const projectScan = await scanProject(files, options.language);
+      results = projectScan.results;
+      crossFileData = projectScan.crossFileData;
+    } else {
+      if (spin) spin.text = `Scanning ${files.length} file(s)...`;
 
-    // Process files with concurrency
-    const concurrency = options.threads;
-    for (let i = 0; i < files.length; i += concurrency) {
-      const batch = files.slice(i, i + concurrency);
-      const batchResults = await Promise.all(
-        batch.map(async (file) => {
-          const lang = options.language || detectLanguage(file);
-          if (!lang) return null;
-          return scanFile(file, lang);
-        })
-      );
+      results = [];
+      let processed = 0;
 
-      for (const result of batchResults) {
-        if (result) results.push(result);
+      // Process files with concurrency
+      const concurrency = options.threads;
+      for (let i = 0; i < files.length; i += concurrency) {
+        const batch = files.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+          batch.map(async (file) => {
+            const lang = options.language || detectLanguage(file);
+            if (!lang) return null;
+            return scanFile(file, lang);
+          })
+        );
+
+        for (const result of batchResults) {
+          if (result) results.push(result);
+        }
+
+        processed += batch.length;
+        if (spin) spin.text = `Scanning... (${processed}/${files.length})`;
       }
-
-      processed += batch.length;
-      if (spin) spin.text = `Scanning... (${processed}/${files.length})`;
     }
 
     if (spin) spin.succeed(`Scanned ${files.length} file(s)`);
@@ -292,6 +368,11 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
             allowedSeverities.includes(v.severity.toLowerCase())
           );
         }
+        if (crossFileData) {
+          crossFileData.taintPaths = crossFileData.taintPaths.filter(p =>
+            allowedSeverities.includes((SINK_SEVERITY[p.sink.type as SinkType] ?? 'high').toLowerCase())
+          );
+        }
       } else {
         // Single severity: treat as minimum level
         const minSeverityIndex = severityOrder.indexOf(options.severity.toLowerCase());
@@ -302,6 +383,12 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
           result.vulnerabilities = result.vulnerabilities.filter(v =>
             severityOrder.indexOf(v.severity) >= minSeverityIndex
           );
+        }
+        if (crossFileData) {
+          crossFileData.taintPaths = crossFileData.taintPaths.filter(p => {
+            const sev = SINK_SEVERITY[p.sink.type as SinkType] ?? 'high';
+            return severityOrder.indexOf(sev) >= minSeverityIndex;
+          });
         }
       }
     }
@@ -316,28 +403,35 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
           return !excludedCwes.includes(cweNumber);
         });
       }
+      if (crossFileData) {
+        crossFileData.taintPaths = crossFileData.taintPaths.filter(p =>
+          !excludedCwes.includes(p.sink.cwe.toUpperCase())
+        );
+      }
     }
 
     // Count total vulnerabilities
     const totalVulns = results.reduce((sum, r) => sum + r.vulnerabilities.length, 0);
     const errors = results.filter(r => r.error).length;
 
+    const crossFilePaths = crossFileData?.taintPaths.length ?? 0;
+
     // Only output if there are vulnerabilities, errors, or verbose/output file requested
     // Always output for JSON/SARIF formats (structured output expected)
-    const shouldOutput = totalVulns > 0 || errors > 0 || options.verbose || options.output || options.format !== 'text';
+    const shouldOutput = totalVulns > 0 || crossFilePaths > 0 || errors > 0 || options.verbose || options.output || options.format !== 'text';
 
     if (shouldOutput) {
       // Output results
       let output: string;
       switch (options.format) {
         case 'json':
-          output = formatJSON(results);
+          output = formatJSON(results, crossFileData);
           break;
         case 'sarif':
-          output = formatSARIF(results);
+          output = formatSARIF(results, crossFileData);
           break;
         default:
-          output = formatResults(results, options.verbose);
+          output = formatResults(results, options.verbose, crossFileData);
       }
 
       if (options.output) {
@@ -356,6 +450,9 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
         } else if (options.verbose) {
           console.log(colors.green(`No vulnerabilities found in ${files.length} file(s)`));
         }
+        if (crossFilePaths > 0) {
+          console.log(colors.red(`Found ${crossFilePaths} cross-file taint path(s)`));
+        }
         if (errors > 0) {
           console.log(colors.yellow(`${errors} file(s) had errors during analysis`));
         }
@@ -363,7 +460,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     }
 
     // Exit code
-    process.exit(totalVulns > 0 ? 1 : 0);
+    process.exit(totalVulns > 0 || crossFilePaths > 0 ? 1 : 0);
 
   } catch (error) {
     if (spin) spin.fail('Analysis failed');

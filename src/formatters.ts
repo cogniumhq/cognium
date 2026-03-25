@@ -3,6 +3,7 @@
  */
 
 import { colors } from './utils/colors.js';
+import type { TaintPath, CrossFileCall, SinkType } from 'circle-ir';
 
 interface Vulnerability {
   type: string;
@@ -10,6 +11,8 @@ interface Vulnerability {
   message: string;
   line: number;
   cwe?: string;
+  /** Instance-specific fix forwarded from SastFinding.fix; takes precedence over VULNERABILITY_HELP */
+  fix?: string;
 }
 
 interface ScanResult {
@@ -95,6 +98,30 @@ const VULNERABILITY_HELP: Record<string, { description: string; fix: string }> =
   external_taint_escape: {
     description: 'External input reaches a sensitive sink without proper validation',
     fix: 'Validate, sanitize, or escape external input before use in sensitive operations'
+  },
+
+  // Reliability & performance findings from analysis passes
+  'dead-code': {
+    description: 'Unreachable code block has no execution path from any entry point',
+    fix: 'Remove the unreachable block or fix the control flow that precedes it'
+  },
+  'missing-await': {
+    description: 'Promise-returning async function called without await — errors are silently discarded and execution continues without the result',
+    fix: 'Add await before the call, or assign the Promise and handle rejection with .catch()'
+  },
+  'n-plus-one': {
+    description: 'Database or HTTP call executes inside a loop — produces N round-trips instead of one batched operation',
+    fix: 'Move the call outside the loop and batch using findMany(), executeIn(), or a bulk API'
+  },
+
+  // Maintainability findings
+  'missing-public-doc': {
+    description: 'Public API member has no JSDoc/Javadoc comment — hinders IDE tooling, code review, and onboarding',
+    fix: 'Add a /** ... */ doc comment above the declaration describing purpose, params, and return value'
+  },
+  'todo-in-prod': {
+    description: 'Deferred-work marker left in production code signals unresolved technical debt',
+    fix: 'Resolve the issue and remove the marker, or open a tracked ticket and delete the comment'
   }
 };
 
@@ -112,7 +139,67 @@ const SEVERITY_ICONS: Record<string, string> = {
   low: 'i',
 };
 
-export function formatResults(results: ScanResult[], verbose?: boolean): string {
+const SINK_SEVERITY: Record<SinkType, string> = {
+  sql_injection: 'critical',
+  nosql_injection: 'high',
+  command_injection: 'critical',
+  path_traversal: 'high',
+  xss: 'high',
+  xxe: 'critical',
+  deserialization: 'critical',
+  ldap_injection: 'high',
+  xpath_injection: 'high',
+  ssrf: 'high',
+  open_redirect: 'medium',
+  code_injection: 'critical',
+  log_injection: 'medium',
+  weak_random: 'low',
+  weak_hash: 'low',
+  weak_crypto: 'low',
+  insecure_cookie: 'low',
+  trust_boundary: 'medium',
+  external_taint_escape: 'medium',
+};
+
+interface CrossFileData {
+  taintPaths: TaintPath[];
+  crossFileCalls: CrossFileCall[];
+}
+
+function formatCrossFilePaths(taintPaths: TaintPath[]): string {
+  if (taintPaths.length === 0) return '';
+  const lines: string[] = [];
+  lines.push(colors.bold(`Cross-file taint paths (${taintPaths.length} found)`));
+  lines.push('');
+
+  for (const p of taintPaths) {
+    const severity = SINK_SEVERITY[p.sink.type] ?? 'high';
+    const colorFn = SEVERITY_COLORS[severity] || ((t: string) => t);
+    const icon = SEVERITY_ICONS[severity] || '?';
+    const cweTag = p.sink.cwe ? ` [${p.sink.cwe}]` : '';
+    const severityUpper = severity.charAt(0).toUpperCase() + severity.slice(1);
+
+    lines.push(`  ${colorFn(`[${icon}]`)} ${colorFn(p.sink.type)} (${severityUpper})${cweTag}`);
+
+    // Hop chain: source → ... → sink
+    const hopChain = p.hops.length > 0
+      ? p.hops.map(h => `${h.file}:${h.line}`).join(' → ')
+      : `${p.source.file}:${p.source.line} → ${p.sink.file}:${p.sink.line}`;
+    lines.push(`      ${hopChain}`);
+    lines.push(`      Source: ${p.source.type} at ${p.source.file}:${p.source.line}`);
+    lines.push(`      Sink:   ${p.sink.type} at ${p.sink.file}:${p.sink.line}`);
+    lines.push(`      Confidence: ${p.confidence.toFixed(2)}`);
+
+    const help = VULNERABILITY_HELP[p.sink.type];
+    if (help?.fix) {
+      lines.push(colors.cyan(`      → Fix: ${help.fix}`));
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+export function formatResults(results: ScanResult[], verbose?: boolean, crossFileData?: CrossFileData): string {
   const lines: string[] = [];
 
   for (const result of results) {
@@ -146,19 +233,27 @@ export function formatResults(results: ScanResult[], verbose?: boolean): string 
 
       // Add help text for the vulnerability
       const help = VULNERABILITY_HELP[vuln.type];
+      const fixText = vuln.fix ?? help?.fix;
       if (help) {
         lines.push(`      ${help.description}`);
-        lines.push(colors.cyan(`      → Fix: ${help.fix}`));
+      }
+      if (fixText) {
+        lines.push(colors.cyan(`      → Fix: ${fixText}`));
       }
     }
 
     lines.push('');
   }
 
+  if (crossFileData?.taintPaths.length) {
+    lines.push('');
+    lines.push(formatCrossFilePaths(crossFileData.taintPaths));
+  }
+
   return lines.join('\n');
 }
 
-export function formatJSON(results: ScanResult[]): string {
+export function formatJSON(results: ScanResult[], crossFileData?: CrossFileData): string {
   const output = {
     version: '1.0.0',
     timestamp: new Date().toISOString(),
@@ -167,10 +262,13 @@ export function formatJSON(results: ScanResult[]): string {
       vulnerabilities: r.vulnerabilities,
       error: r.error,
     })),
+    cross_file_taint_paths: crossFileData?.taintPaths ?? [],
+    cross_file_calls: crossFileData?.crossFileCalls ?? [],
     summary: {
       filesScanned: results.length,
       filesWithVulnerabilities: results.filter(r => r.vulnerabilities.length > 0).length,
       totalVulnerabilities: results.reduce((sum, r) => sum + r.vulnerabilities.length, 0),
+      crossFileTaintPaths: crossFileData?.taintPaths.length ?? 0,
       errors: results.filter(r => r.error).length,
     },
   };
@@ -178,7 +276,7 @@ export function formatJSON(results: ScanResult[]): string {
   return JSON.stringify(output, null, 2);
 }
 
-export function formatSARIF(results: ScanResult[]): string {
+export function formatSARIF(results: ScanResult[], crossFileData?: CrossFileData): string {
   const sarif = {
     $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
     version: '2.1.0',
@@ -189,10 +287,10 @@ export function formatSARIF(results: ScanResult[]): string {
             name: 'cognium',
             version: '1.0.0',
             informationUri: 'https://cognium.dev',
-            rules: generateRules(results),
+            rules: generateRules(results, crossFileData),
           },
         },
-        results: generateSarifResults(results),
+        results: generateSarifResults(results, crossFileData),
       },
     ],
   };
@@ -200,7 +298,7 @@ export function formatSARIF(results: ScanResult[]): string {
   return JSON.stringify(sarif, null, 2);
 }
 
-function generateRules(results: ScanResult[]): any[] {
+function generateRules(results: ScanResult[], crossFileData?: CrossFileData): any[] {
   const ruleSet = new Map<string, any>();
 
   for (const result of results) {
@@ -223,10 +321,30 @@ function generateRules(results: ScanResult[]): any[] {
     }
   }
 
+  for (const p of (crossFileData?.taintPaths ?? [])) {
+    const ruleId = `cross-file-${p.sink.type}`;
+    if (!ruleSet.has(ruleId)) {
+      const severity = SINK_SEVERITY[p.sink.type] ?? 'high';
+      ruleSet.set(ruleId, {
+        id: ruleId,
+        name: `cross-file-${p.sink.type}`,
+        shortDescription: { text: `Cross-file ${p.sink.type}` },
+        defaultConfiguration: {
+          level: severity === 'critical' || severity === 'high' ? 'error' : 'warning',
+        },
+        properties: {
+          'security-severity': severity === 'critical' ? '9.0' :
+                               severity === 'high' ? '7.0' :
+                               severity === 'medium' ? '5.0' : '3.0',
+        },
+      });
+    }
+  }
+
   return Array.from(ruleSet.values());
 }
 
-function generateSarifResults(results: ScanResult[]): any[] {
+function generateSarifResults(results: ScanResult[], crossFileData?: CrossFileData): any[] {
   const sarifResults: any[] = [];
 
   for (const result of results) {
@@ -246,9 +364,44 @@ function generateSarifResults(results: ScanResult[]): any[] {
         properties: {
           cwe: vuln.cwe,
           severity: vuln.severity,
+          ...(vuln.fix ? { fix: vuln.fix } : {}),
         },
       });
     }
+  }
+
+  for (const p of (crossFileData?.taintPaths ?? [])) {
+    const severity = SINK_SEVERITY[p.sink.type] ?? 'high';
+    sarifResults.push({
+      ruleId: `cross-file-${p.sink.type}`,
+      level: severity === 'critical' || severity === 'high' ? 'error' : 'warning',
+      message: {
+        text: `Cross-file taint flow from ${p.source.file}:${p.source.line} to ${p.sink.file}:${p.sink.line}`,
+      },
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri: p.sink.file },
+            region: { startLine: p.sink.line },
+          },
+        },
+      ],
+      relatedLocations: [
+        {
+          id: 0,
+          message: { text: 'taint source' },
+          physicalLocation: {
+            artifactLocation: { uri: p.source.file },
+            region: { startLine: p.source.line },
+          },
+        },
+      ],
+      properties: {
+        cwe: p.sink.cwe,
+        severity,
+        confidence: p.confidence,
+      },
+    });
   }
 
   return sarifResults;
