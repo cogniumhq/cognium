@@ -122,6 +122,30 @@ const VULNERABILITY_HELP: Record<string, { description: string; fix: string }> =
   'todo-in-prod': {
     description: 'Deferred-work marker left in production code signals unresolved technical debt',
     fix: 'Resolve the issue and remove the marker, or open a tracked ticket and delete the comment'
+  },
+
+  // Reliability — Group 2 passes (v3.9.2)
+  'null-deref': {
+    description: 'Variable explicitly assigned null/None/undefined is dereferenced without a prior null check',
+    fix: 'Add a null check before dereferencing: `if (x != null) { ... }` or use Optional/optional chaining'
+  },
+  'resource-leak': {
+    description: 'Resource (file, socket, stream) is opened but not guaranteed to be closed on all exit paths',
+    fix: 'Use try-with-resources (Java 7+): `try (FileInputStream fis = ...) { ... }`, or Python `with open(...) as f:`'
+  },
+  'unchecked-return': {
+    description: 'Return value of a critical operation (delete, mkdir, tryLock) is silently discarded — failures go undetected',
+    fix: 'Check the return value: `if (!file.delete()) { throw new IOException("failed to delete " + file); }`'
+  },
+
+  // Performance — Group 2 passes (v3.9.2)
+  'sync-io-async': {
+    description: 'Blocking I/O call inside an async function blocks the event loop and degrades throughput under load',
+    fix: 'Replace *Sync calls with their async equivalents and await the result: `await fs.promises.readFile(...)`'
+  },
+  'string-concat-loop': {
+    description: 'String concatenation with += inside a loop produces O(n²) allocations as strings are immutable',
+    fix: 'Accumulate parts in an array and join() after the loop, or use StringBuilder (Java)'
   }
 };
 
