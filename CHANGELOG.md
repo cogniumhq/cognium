@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-03-26
+
+### Fixed
+
+- **Zero false positives on TypeScript/library code** — circle-ir upgraded to 3.9.7, which
+  eliminates all remaining false positives when scanning TypeScript projects:
+  1,542 cross-file `sql_injection`, 8 cross-file `log_injection`, and 4 `external_taint_escape`.
+  Root causes: a `matchesSourcePattern` bug that allowed bare `get()` calls to match all
+  class-qualified source patterns (Map/HashMap/Properties/Request), and `interprocedural_param`
+  sources leaking into cross-file and Scenario-B analyses where they don't belong.
+  See [circle-ir CHANGELOG](https://github.com/cogniumhq/circle-ir/blob/main/CHANGELOG.md) for details.
+
+[1.2.1]: https://github.com/cogniumhq/cognium/compare/v1.2.0...v1.2.1
+
 ## [1.2.0] - 2026-03-26
 
 ### Added
