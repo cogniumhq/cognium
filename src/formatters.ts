@@ -160,6 +160,22 @@ const VULNERABILITY_HELP: Record<string, { description: string; fix: string }> =
   'unused-variable': {
     description: 'A local variable is declared and assigned but its value is never read — the computation is dead',
     fix: 'Remove the assignment, use the value, or prefix the variable with _ if intentionally unused'
+  },
+  'dependency-fan-out': {
+    description: 'This module imports 20 or more other modules, indicating high efferent coupling that makes it harder to test and modify independently',
+    fix: 'Extract related logic into smaller focused modules, apply the Interface Segregation Principle, or introduce a facade layer to hide dependencies'
+  },
+  'stale-doc-ref': {
+    description: 'A doc comment references a class or symbol (via {@link} or @see) that cannot be found in the file\'s type declarations or imports',
+    fix: 'Update the reference to point to the correct current symbol, add a missing import, or remove the stale reference entirely'
+  },
+  'circular-dependency': {
+    description: 'A cycle exists in the module import graph — module A imports B which (directly or transitively) imports A — creating tight coupling and potential initialization-order bugs',
+    fix: 'Extract the shared code into a third module that both A and B can import without creating a cycle, or invert a dependency using dependency injection'
+  },
+  'orphan-module': {
+    description: 'This module has no incoming import edges and is not a recognized entry point (index, main, app, server, or mod) — it may be dead code or accidentally disconnected',
+    fix: 'Either import the module where its functionality is needed, mark it as an entry point, or delete it if it is truly unused'
   }
 };
 
