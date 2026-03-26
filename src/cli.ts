@@ -3,8 +3,9 @@
  * cognium CLI - AI-powered static analysis for security vulnerabilities
  */
 
-import { readFileSync, existsSync, statSync, readdirSync } from 'fs';
-import { join, extname, resolve } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { stat, readdir } from 'fs/promises';
+import { join, extname, resolve, relative } from 'path';
 import {
   initAnalyzer, analyze, analyzeProject,
   type SinkType, type SastFinding, type SupportedLanguage,
@@ -134,27 +135,37 @@ function detectLanguage(filePath: string): string | null {
   return LANG_MAP[ext] || null;
 }
 
-function collectFiles(targetPath: string, language?: string, excludeTests = false): string[] {
-  const files: string[] = [];
-  const stat = statSync(targetPath);
+function normalizeLanguage(language: string): string {
+  return language.trim().toLowerCase();
+}
 
-  if (stat.isFile()) {
+function fileMatchesLanguage(filePath: string, language?: string): boolean {
+  const detected = detectLanguage(filePath);
+  if (!detected) return false;
+  if (!language) return true;
+  return detected === normalizeLanguage(language);
+}
+
+async function collectFiles(targetPath: string, language?: string, excludeTests = false): Promise<string[]> {
+  const files: string[] = [];
+  const pathStat = await stat(targetPath);
+
+  if (pathStat.isFile()) {
     // Skip test files if excludeTests is enabled
     if (excludeTests && isTestFile(targetPath)) {
       return files;
     }
-    const lang = language || detectLanguage(targetPath);
-    if (lang) {
+    if (fileMatchesLanguage(targetPath, language)) {
       files.push(targetPath);
     }
-  } else if (stat.isDirectory()) {
-    const entries = readdirSync(targetPath, { withFileTypes: true });
+  } else if (pathStat.isDirectory()) {
+    const entries = await readdir(targetPath, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
       // Skip test directories if excludeTests is enabled
       if (excludeTests && /^(test|tests|__tests__|spec|__mocks__)$/i.test(entry.name)) continue;
       const fullPath = join(targetPath, entry.name);
-      files.push(...collectFiles(fullPath, language, excludeTests));
+      files.push(...await collectFiles(fullPath, language, excludeTests));
     }
   }
 
@@ -249,7 +260,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
   try {
     // Initialize circle-ir with appropriate WASM paths
     // Detect if we're running as a standalone binary (compiled with bun --compile)
-    const isStandalone = import.meta.url.includes('/$bunfs/') || !import.meta.url.includes('node_modules');
+    const isStandalone = import.meta.url.includes('/$bunfs/');
 
     if (isStandalone) {
       // Standalone binary or script bundle: look for wasm/ directory in multiple locations
@@ -337,7 +348,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       process.exit(2);
     }
 
-    const files = collectFiles(absPath, options.language, options.excludeTests);
+    const files = await collectFiles(absPath, options.language, options.excludeTests);
 
     if (files.length === 0) {
       if (spin) spin.warn('No supported files found');
@@ -347,7 +358,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     let results: ScanResult[];
     let crossFileData: CrossFileData | undefined;
 
-    if (statSync(absPath).isDirectory()) {
+    if ((await stat(absPath)).isDirectory()) {
       if (spin) spin.text = `Running project analysis on ${files.length} file(s)...`;
       const projectScan = await scanProject(files, options.language);
       results = projectScan.results;
@@ -358,6 +369,12 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       results = [];
       let processed = 0;
 
+      const formatCurrentFile = (file: string): string => {
+        const rel = relative(absPath, file) || file;
+        // Keep spinner line readable for deeply nested paths.
+        return rel.length > 80 ? `...${rel.slice(-77)}` : rel;
+      };
+
       // Process files with concurrency
       const concurrency = options.threads;
       for (let i = 0; i < files.length; i += concurrency) {
@@ -366,6 +383,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
           batch.map(async (file) => {
             const lang = options.language || detectLanguage(file);
             if (!lang) return null;
+            if (spin) spin.text = `Scanning ${formatCurrentFile(file)}... (${processed}/${files.length})`;
             return scanFile(file, lang);
           })
         );
@@ -581,7 +599,7 @@ async function main(): Promise<void> {
 
     const targetPath = args[0];
     const scanOptions: ScanOptions = {
-      language: (options.language || options.l) as string | undefined,
+      language: (options.language || options.l) ? normalizeLanguage((options.language || options.l) as string) : undefined,
       format: (options.format || options.f || 'text') as 'text' | 'json' | 'sarif',
       threads: parseInt((options.threads as string) || '4', 10),
       severity: (options.severity) as string | undefined,

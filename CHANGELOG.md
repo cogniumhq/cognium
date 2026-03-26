@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-03-26
+
+### Fixed
+
+- **`--language` filter now correctly filters files by extension** — previously `--language typescript`
+  collected all supported file types (Java, Python, etc.) because the language flag was used as a
+  hint rather than a filter. Now only files matching the requested language extension are collected.
+- **Standalone binary detection simplified** — removed the `|| !import.meta.url.includes('node_modules')`
+  condition from `isStandalone` that could incorrectly activate standalone WASM search when running
+  `node dist/cli.js` in environments where the path doesn't include `node_modules`.
+- **Spinner no longer emits control characters in CI** — spinner is now disabled when stdout is not a
+  TTY (piped output, CI environments), preventing garbled escape sequences in logs.
+- **Per-file progress in spinner** — spinner now shows the current file being scanned and a
+  `(N/total)` counter, giving better feedback on large codebases.
+- **Async file I/O in file collection** — `collectFiles()` now uses non-blocking `fs/promises`
+  (`stat`, `readdir`) instead of synchronous `statSync`/`readdirSync`.
+
+[1.2.2]: https://github.com/cogniumhq/cognium/compare/v1.2.1...v1.2.2
+
 ## [1.2.1] - 2026-03-26
 
 ### Fixed
