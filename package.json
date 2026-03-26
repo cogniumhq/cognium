@@ -64,7 +64,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "circle-ir": "file:../circle-ir-standalone/circle-ir-3.9.7.tgz"
+    "circle-ir": "^3.9.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
