@@ -13,6 +13,8 @@ interface Vulnerability {
   cwe?: string;
   /** Instance-specific fix forwarded from SastFinding.fix; takes precedence over VULNERABILITY_HELP */
   fix?: string;
+  /** ISO 25010 category: security | reliability | performance | maintainability | architecture */
+  category?: string;
 }
 
 interface ScanResult {
@@ -277,9 +279,10 @@ export function formatResults(results: ScanResult[], verbose?: boolean, crossFil
       const cweTag = vuln.cwe ? ` [${vuln.cwe}]` : '';
       const severityUpper = vuln.severity.charAt(0).toUpperCase() + vuln.severity.slice(1);
 
-      // Main vulnerability line with severity, type, and CWE
+      // Main finding line with severity, type, CWE, and category for non-security findings
+      const categoryTag = vuln.category && vuln.category !== 'security' ? ` [${vuln.category}]` : '';
       lines.push(
-        `  ${colorFn(`[${icon}]`)} ${colorFn(vuln.type)} (${severityUpper})${cweTag}`
+        `  ${colorFn(`[${icon}]`)} ${colorFn(vuln.type)} (${severityUpper})${cweTag}${categoryTag}`
       );
 
       // Line number and taint flow message

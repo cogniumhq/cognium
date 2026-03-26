@@ -4,7 +4,7 @@
     "": {
       "name": "cognium",
       "dependencies": {
-        "circle-ir": "^3.8.3",
+        "circle-ir": "file:../circle-ir-standalone/circle-ir-3.9.6.tgz",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -18,7 +18,7 @@
 
     "bun-types": ["bun-types@1.3.10", "", { "dependencies": { "@types/node": "*" } }, "sha512-tcpfCCl6XWo6nCVnpcVrxQ+9AYN1iqMIzgrSKYMB/fjLtV2eyAVEg7AxQJuCq/26R6HpKWykQXuSOq/21RYcbg=="],
 
-    "circle-ir": ["circle-ir@3.8.3", "", { "dependencies": { "web-tree-sitter": "^0.26.7", "yaml": "^2.8.2" } }, "sha512-+5x+Xyhxq+v4UyZ2J2iTjYpzxoFkuz5VvnE71vK8aPhBnz+KNbU1FaPU9+GQPMzDnVTw75v8yewgkRTcUuoa4g=="],
+    "circle-ir": ["circle-ir@../circle-ir-standalone/circle-ir-3.9.6.tgz", { "dependencies": { "web-tree-sitter": "^0.26.7", "yaml": "^2.8.2" } }],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 

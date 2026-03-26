@@ -56,6 +56,7 @@ interface ScanOptions {
   format: 'text' | 'json' | 'sarif';
   threads: number;
   severity?: string;
+  category?: string;
   output?: string;
   quiet?: boolean;
   verbose?: boolean;
@@ -73,6 +74,8 @@ interface ScanResult {
     cwe?: string;
     /** Instance-specific fix suggestion forwarded from SastFinding.fix */
     fix?: string;
+    /** ISO 25010 category: security | reliability | performance | maintainability | architecture */
+    category: string;
   }>;
   error?: string;
 }
@@ -170,6 +173,7 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
       message: `${flow.sink_type} vulnerability: tainted data flows from line ${flow.source_line} to line ${flow.sink_line}`,
       line: flow.sink_line,
       cwe: SINK_CWE[flow.sink_type],
+      category: 'security',
     }));
 
     // Quality findings from analysis passes (dead-code, missing-await, n-plus-one, etc.)
@@ -181,6 +185,7 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
         line: finding.line,
         cwe: finding.cwe,
         fix: finding.fix,
+        category: finding.category ?? 'reliability',
       });
     }
 
@@ -213,6 +218,7 @@ async function scanProject(
       message: `${flow.sink_type} vulnerability: tainted data flows from line ${flow.source_line} to line ${flow.sink_line}`,
       line: flow.sink_line,
       cwe: SINK_CWE[flow.sink_type],
+      category: 'security',
     }));
     for (const finding of (analysis.findings ?? []) as SastFinding[]) {
       vulnerabilities.push({
@@ -222,6 +228,7 @@ async function scanProject(
         line: finding.line,
         cwe: finding.cwe,
         fix: finding.fix,
+        category: finding.category ?? 'reliability',
       });
     }
     return { file, vulnerabilities };
@@ -245,16 +252,32 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     const isStandalone = import.meta.url.includes('/$bunfs/') || !import.meta.url.includes('node_modules');
 
     if (isStandalone) {
-      // Standalone binary: look for wasm/ directory in multiple locations
+      // Standalone binary or script bundle: look for wasm/ directory in multiple locations
       const { dirname, join } = await import('path');
       const binaryDir = dirname(process.execPath);
       const cwd = process.cwd();
 
+      // For script bundles (dist/cli.js), import.meta.url is an absolute file:// URL
+      // so we can resolve WASM relative to the script — this works from any working directory.
+      let scriptDir: string | null = null;
+      if (!import.meta.url.includes('/$bunfs/')) {
+        try {
+          const { fileURLToPath } = await import('url');
+          scriptDir = dirname(fileURLToPath(import.meta.url));
+        } catch { /* not a file:// URL */ }
+      }
+
       // Try multiple locations for wasm directory
       const wasmLocations = [
-        join(binaryDir, 'wasm'),           // Next to binary
-        join(cwd, 'wasm'),                 // Current directory
+        join(binaryDir, 'wasm'),           // Next to compiled binary
+        join(cwd, 'wasm'),                 // Current working directory
         join(binaryDir, '..', 'wasm'),     // Parent of binary directory
+        // Script-relative paths (work from any directory when running dist/cli.js)
+        ...(scriptDir ? [
+          join(scriptDir, 'wasm'),                                         // dist/wasm/
+          join(scriptDir, '..', 'wasm'),                                   // project root wasm/
+          join(scriptDir, '..', 'node_modules', 'circle-ir', 'dist', 'wasm'), // node_modules
+        ] : []),
       ];
 
       let wasmDir: string | null = null;
@@ -272,6 +295,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
             bash: join(wasmDir, 'tree-sitter-bash.wasm'),
             java: join(wasmDir, 'tree-sitter-java.wasm'),
             javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
+            typescript: join(wasmDir, 'tree-sitter-javascript.wasm'),
             python: join(wasmDir, 'tree-sitter-python.wasm'),
             rust: join(wasmDir, 'tree-sitter-rust.wasm'),
           }
@@ -298,6 +322,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
           bash: wasmBasePath + 'tree-sitter-bash.wasm',
           java: wasmBasePath + 'tree-sitter-java.wasm',
           javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
+          typescript: wasmBasePath + 'tree-sitter-javascript.wasm',
           python: wasmBasePath + 'tree-sitter-python.wasm',
           rust: wasmBasePath + 'tree-sitter-rust.wasm',
         }
@@ -360,6 +385,9 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     const severityOrder = ['low', 'medium', 'high', 'critical'];
 
     if (options.severity) {
+      if (typeof options.severity !== 'string') {
+        throw new Error('--severity requires a value. Valid levels: low, medium, high, critical');
+      }
       // Check if multiple severities are specified (comma-separated)
       if (options.severity.includes(',')) {
         const allowedSeverities = options.severity.split(',').map(s => s.trim().toLowerCase());
@@ -395,6 +423,9 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
 
     // Filter by excluded CWEs if specified
     if (options.excludeCwe) {
+      if (typeof options.excludeCwe !== 'string') {
+        throw new Error('--exclude-cwe requires a value. Example: --exclude-cwe CWE-330,CWE-327');
+      }
       const excludedCwes = options.excludeCwe.split(',').map(c => c.trim().toUpperCase());
       for (const result of results) {
         result.vulnerabilities = result.vulnerabilities.filter(v => {
@@ -410,13 +441,33 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       }
     }
 
-    // Count total vulnerabilities
-    const totalVulns = results.reduce((sum, r) => sum + r.vulnerabilities.length, 0);
+    // Filter by category if specified
+    if (options.category) {
+      if (typeof options.category !== 'string') {
+        throw new Error('--category requires a value. Valid categories: security, reliability, performance, maintainability, architecture');
+      }
+      const allowedCategories = options.category.split(',').map(c => c.trim().toLowerCase());
+      for (const result of results) {
+        result.vulnerabilities = result.vulnerabilities.filter(v =>
+          allowedCategories.includes(v.category.toLowerCase())
+        );
+      }
+      // Cross-file taint paths are always security findings; exclude them when security isn't requested
+      if (crossFileData && !allowedCategories.includes('security')) {
+        crossFileData.taintPaths = [];
+      }
+    }
+
+    // Count findings by category
+    const allVulns = results.reduce((acc: ScanResult['vulnerabilities'], r) => acc.concat(r.vulnerabilities), []);
+    const totalVulns = allVulns.length;
+    const securityCount = allVulns.filter(v => v.category === 'security').length + (crossFileData?.taintPaths.length ?? 0);
+    const qualityCount = allVulns.filter(v => v.category !== 'security').length;
     const errors = results.filter(r => r.error).length;
 
     const crossFilePaths = crossFileData?.taintPaths.length ?? 0;
 
-    // Only output if there are vulnerabilities, errors, or verbose/output file requested
+    // Only output if there are findings, errors, or verbose/output file requested
     // Always output for JSON/SARIF formats (structured output expected)
     const shouldOutput = totalVulns > 0 || crossFilePaths > 0 || errors > 0 || options.verbose || options.output || options.format !== 'text';
 
@@ -445,13 +496,15 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       // Summary
       if (!options.quiet && options.format === 'text') {
         console.log();
-        if (totalVulns > 0) {
-          console.log(colors.red(`Found ${totalVulns} vulnerability(ies) in ${files.length} file(s)`));
-        } else if (options.verbose) {
-          console.log(colors.green(`No vulnerabilities found in ${files.length} file(s)`));
+        if (securityCount > 0) {
+          console.log(colors.red(`Found ${securityCount} security finding(s) in ${files.length} file(s)`));
         }
-        if (crossFilePaths > 0) {
-          console.log(colors.red(`Found ${crossFilePaths} cross-file taint path(s)`));
+        if (qualityCount > 0) {
+          const label = securityCount > 0 ? 'Also found' : 'Found';
+          console.log(colors.yellow(`${label} ${qualityCount} code quality finding(s) in ${files.length} file(s)`));
+        }
+        if (securityCount === 0 && qualityCount === 0 && options.verbose) {
+          console.log(colors.green(`No findings in ${files.length} file(s)`));
         }
         if (errors > 0) {
           console.log(colors.yellow(`${errors} file(s) had errors during analysis`));
@@ -459,8 +512,8 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       }
     }
 
-    // Exit code
-    process.exit(totalVulns > 0 || crossFilePaths > 0 ? 1 : 0);
+    // Exit code: 1 for security findings, 0 for quality-only or clean
+    process.exit(securityCount > 0 ? 1 : 0);
 
   } catch (error) {
     if (spin) spin.fail('Analysis failed');
@@ -532,6 +585,7 @@ async function main(): Promise<void> {
       format: (options.format || options.f || 'text') as 'text' | 'json' | 'sarif',
       threads: parseInt((options.threads as string) || '4', 10),
       severity: (options.severity) as string | undefined,
+      category: (options.category) as string | undefined,
       output: (options.output || options.o) as string | undefined,
       quiet: options.quiet === true || options.q === true,
       verbose: options.verbose === true || options.v === true,
