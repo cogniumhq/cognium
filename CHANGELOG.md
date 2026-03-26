@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-25
+
+### Added
+
+- **17 new SAST detection passes** (via circle-ir 3.9.0–3.9.4):
+  - **Reliability**: `null-deref` (CWE-476), `resource-leak` (CWE-772),
+    `unchecked-return` (CWE-252), `dead-code` (CWE-561),
+    `variable-shadowing` (CWE-1109), `leaked-global` (CWE-1109),
+    `unused-variable` (CWE-561)
+  - **Performance**: `missing-await` (CWE-252), `n-plus-one` (CWE-1049),
+    `sync-io-async` (CWE-1050), `string-concat-loop` (CWE-1046)
+  - **Architecture**: `circular-dependency` (CWE-1047), `orphan-module`,
+    `dependency-fan-out`, `stale-doc-ref`
+  - **Maintainability**: `missing-public-doc`, `todo-in-prod`
+- **Software metrics engine** (via circle-ir 3.9.5): every scan now populates
+  `ir.metrics` with 24 quality metrics — cyclomatic complexity (v(G)/WMC),
+  Halstead suite, size (LOC/NLOC), CK coupling (CBO/RFC), inheritance (DIT/NOC),
+  cohesion (LCOM), doc_coverage, and four composite scores
+  (maintainability_index, code_quality_index, bug_hotspot_score, refactoring_roi).
+
+### Changed
+
+- **circle-ir upgraded** from 3.8.x → 3.9.5
+
+[1.1.0]: https://github.com/cogniumhq/cognium/compare/v1.0.9...v1.1.0
+
 ## [1.0.9] - 2026-03-17
 
 ### Fixed
