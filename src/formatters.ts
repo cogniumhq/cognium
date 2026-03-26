@@ -146,6 +146,20 @@ const VULNERABILITY_HELP: Record<string, { description: string; fix: string }> =
   'string-concat-loop': {
     description: 'String concatenation with += inside a loop produces O(n²) allocations as strings are immutable',
     fix: 'Accumulate parts in an array and join() after the loop, or use StringBuilder (Java)'
+  },
+
+  // Reliability — Group 3 passes (v3.9.3)
+  'variable-shadowing': {
+    description: 'Inner scope declares a variable with the same name as an outer-scope variable or parameter, hiding the outer binding',
+    fix: 'Rename the inner variable to avoid hiding the outer binding and make the intent explicit'
+  },
+  'leaked-global': {
+    description: 'Assignment without let/const/var inside a function creates an accidental global property in non-strict mode JS',
+    fix: 'Add let, const, or var before the first assignment to explicitly declare the variable'
+  },
+  'unused-variable': {
+    description: 'A local variable is declared and assigned but its value is never read — the computation is dead',
+    fix: 'Remove the assignment, use the value, or prefix the variable with _ if intentionally unused'
   }
 };
 
