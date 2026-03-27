@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-03-26
+
+### Added
+
+- **`cognium metrics <path>` command** — new subcommand that reports software quality metrics for
+  files or directories. Supports all languages supported by `scan`. Metrics include cyclomatic
+  complexity, Halstead suite, WMC, LOC/NLOC, comment density, CBO, RFC, DIT, NOC, LCOM, doc
+  coverage, and four composite scores (maintainability index, code quality index, bug hotspot
+  score, refactoring ROI).
+  - `--format text|json` — human-readable grouped output (default) or machine-readable JSON
+  - `--category <cats>` — filter to specific metric categories (`complexity`, `size`, `coupling`,
+    `inheritance`, `cohesion`, `documentation`, `duplication`); comma-separated
+  - `--language <lang>` — analyze only files for the given language
+  - `--exclude-tests` — skip test files and directories
+  - `-o, --output <file>` — write results to a file instead of stdout
+  - `-q, --quiet` — suppress per-file progress output
+- **Updated help text** (`cognium --help`) — METRICS section added with all options and examples
+
+[1.2.3]: https://github.com/cogniumhq/cognium/compare/v1.2.2...v1.2.3
+
 ## [1.2.2] - 2026-03-26
 
 ### Fixed

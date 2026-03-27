@@ -10,6 +10,7 @@ import {
   initAnalyzer, analyze, analyzeProject,
   type SinkType, type SastFinding, type SupportedLanguage,
   type TaintPath, type CrossFileCall,
+  type MetricValue, type FileMetrics,
 } from 'circle-ir';
 import { formatResults, formatJSON, formatSARIF } from './formatters.js';
 import { version } from './version.js';
@@ -63,6 +64,15 @@ interface ScanOptions {
   verbose?: boolean;
   excludeTests?: boolean;
   excludeCwe?: string;
+}
+
+interface MetricsOptions {
+  format: 'text' | 'json';
+  category?: string;   // comma-separated: complexity,size,coupling,inheritance,cohesion,documentation,duplication
+  output?: string;
+  quiet?: boolean;
+  language?: string;
+  excludeTests?: boolean;
 }
 
 interface ScanResult {
@@ -540,6 +550,220 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
   }
 }
 
+// ─── Metrics command ─────────────────────────────────────────────────────────
+
+/**
+ * Format a metric name for display: replace underscores with spaces, pad to 28 chars.
+ */
+function fmtMetricName(name: string): string {
+  return name.replace(/_/g, ' ').padEnd(28);
+}
+
+/**
+ * Format a metric value for display: right-align the numeric value and append unit.
+ */
+function fmtMetricValue(value: number, unit?: string): string {
+  const num = Number.isInteger(value)
+    ? value.toString()
+    : value.toFixed(2);
+  return unit ? `${num} ${unit}` : num;
+}
+
+async function runMetrics(targetPath: string, options: MetricsOptions): Promise<void> {
+  const spin = options.quiet ? null : spinner('Initializing analyzer...').start();
+
+  try {
+    // Initialize WASM (same as runScan)
+    const isStandalone = import.meta.url.includes('/$bunfs/');
+
+    if (isStandalone) {
+      const { dirname, join } = await import('path');
+      const binaryDir = dirname(process.execPath);
+      const cwd = process.cwd();
+
+      let scriptDir: string | null = null;
+      if (!import.meta.url.includes('/$bunfs/')) {
+        try {
+          const { fileURLToPath } = await import('url');
+          scriptDir = dirname(fileURLToPath(import.meta.url));
+        } catch { /* not a file:// URL */ }
+      }
+
+      const wasmLocations = [
+        join(binaryDir, 'wasm'),
+        join(cwd, 'wasm'),
+        join(binaryDir, '..', 'wasm'),
+        ...(scriptDir ? [
+          join(scriptDir, 'wasm'),
+          join(scriptDir, '..', 'wasm'),
+          join(scriptDir, '..', 'node_modules', 'circle-ir', 'dist', 'wasm'),
+        ] : []),
+      ];
+
+      let wasmDir: string | null = null;
+      for (const location of wasmLocations) {
+        if (existsSync(location) && existsSync(join(location, 'web-tree-sitter.wasm'))) {
+          wasmDir = location;
+          break;
+        }
+      }
+
+      if (wasmDir) {
+        await initAnalyzer({
+          wasmPath: join(wasmDir, 'web-tree-sitter.wasm'),
+          languagePaths: {
+            bash: join(wasmDir, 'tree-sitter-bash.wasm'),
+            java: join(wasmDir, 'tree-sitter-java.wasm'),
+            javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
+            typescript: join(wasmDir, 'tree-sitter-javascript.wasm'),
+            python: join(wasmDir, 'tree-sitter-python.wasm'),
+            rust: join(wasmDir, 'tree-sitter-rust.wasm'),
+          }
+        });
+      } else {
+        if (spin) spin.fail('WASM files not found');
+        console.error(colors.red('\nError: WASM files not found'));
+        process.exit(2);
+      }
+    } else {
+      const wasmBasePath = new URL('../node_modules/circle-ir/dist/wasm/', import.meta.url).pathname;
+      await initAnalyzer({
+        wasmPath: wasmBasePath + 'web-tree-sitter.wasm',
+        languagePaths: {
+          bash: wasmBasePath + 'tree-sitter-bash.wasm',
+          java: wasmBasePath + 'tree-sitter-java.wasm',
+          javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
+          typescript: wasmBasePath + 'tree-sitter-javascript.wasm',
+          python: wasmBasePath + 'tree-sitter-python.wasm',
+          rust: wasmBasePath + 'tree-sitter-rust.wasm',
+        }
+      });
+    }
+
+    if (spin) spin.text = 'Collecting files...';
+
+    const absPath = resolve(targetPath);
+    if (!existsSync(absPath)) {
+      if (spin) spin.fail(`Path not found: ${absPath}`);
+      process.exit(2);
+    }
+
+    const files = await collectFiles(absPath, options.language, options.excludeTests);
+
+    if (files.length === 0) {
+      if (spin) spin.warn('No supported files found');
+      return;
+    }
+
+    // Collect metrics per file
+    const fileMetricsList: FileMetrics[] = [];
+    let processed = 0;
+
+    for (const file of files) {
+      const lang = options.language || detectLanguage(file);
+      if (!lang) { processed++; continue; }
+
+      if (spin) {
+        const rel = relative(absPath, file) || file;
+        const label = rel.length > 80 ? `...${rel.slice(-77)}` : rel;
+        spin.text = `Analyzing ${label}... (${processed}/${files.length})`;
+      }
+
+      try {
+        const code = readFileSync(file, 'utf-8');
+        const result = await analyze(code, file, lang as any);
+        if (result.metrics) {
+          fileMetricsList.push(result.metrics);
+        }
+      } catch {
+        // Skip files that fail to parse
+      }
+      processed++;
+    }
+
+    if (spin) spin.succeed(`Analyzed ${files.length} file(s)`);
+
+    // Filter by category if specified
+    let allowedCategories: string[] | null = null;
+    if (options.category) {
+      allowedCategories = options.category.split(',').map(c => c.trim().toLowerCase());
+    }
+
+    const filtered = fileMetricsList.map(fm => ({
+      file: fm.file,
+      metrics: allowedCategories
+        ? fm.metrics.filter(m => allowedCategories!.includes(m.category))
+        : fm.metrics,
+    })).filter(fm => fm.metrics.length > 0);
+
+    const totalMetrics = filtered.reduce((sum, fm) => sum + fm.metrics.length, 0);
+
+    // Format output
+    let output: string;
+    if (options.format === 'json') {
+      output = JSON.stringify({
+        version,
+        timestamp: new Date().toISOString(),
+        files: filtered.map(fm => ({
+          file: fm.file,
+          metrics: fm.metrics,
+        })),
+        summary: {
+          files: filtered.length,
+          total_metrics: totalMetrics,
+        },
+      }, null, 2);
+    } else {
+      // Text format: grouped by category
+      const lines: string[] = [];
+      for (const fm of filtered) {
+        const rel = relative(absPath, fm.file) || fm.file;
+        lines.push(rel);
+
+        // Group metrics by category
+        const byCategory = new Map<string, MetricValue[]>();
+        for (const m of fm.metrics) {
+          const cat = m.category;
+          const list = byCategory.get(cat) ?? [];
+          list.push(m);
+          byCategory.set(cat, list);
+        }
+
+        for (const [cat, metrics] of byCategory.entries()) {
+          lines.push(`  ${cat}`);
+          for (const m of metrics) {
+            lines.push(`    ${fmtMetricName(m.name)}${fmtMetricValue(m.value, m.unit)}`);
+          }
+        }
+        lines.push('');
+      }
+
+      if (filtered.length === 0) {
+        lines.push('No metrics available for the scanned files.');
+      } else {
+        lines.push(`Summary: ${totalMetrics} metric(s) across ${filtered.length} file(s)`);
+      }
+
+      output = lines.join('\n');
+    }
+
+    if (options.output) {
+      const { writeFileSync } = await import('fs');
+      writeFileSync(options.output, output);
+      console.log(colors.green(`Results written to ${options.output}`));
+    } else {
+      console.log(output);
+    }
+
+    process.exit(0);
+
+  } catch (error) {
+    if (spin) spin.fail('Metrics analysis failed');
+    console.error(colors.red(error instanceof Error ? error.message : 'Unknown error'));
+    process.exit(2);
+  }
+}
+
 // Init command handler
 async function handleInit(): Promise<void> {
   const configPath = 'cognium.config.json';
@@ -586,6 +810,28 @@ async function main(): Promise<void> {
   // Handle init command
   if (command === 'init') {
     await handleInit();
+    return;
+  }
+
+  // Handle metrics command
+  if (command === 'metrics') {
+    if (args.length === 0) {
+      console.error(colors.red('Error: metrics command requires a path argument'));
+      console.log('\nUsage: cognium metrics <path> [options]');
+      process.exit(1);
+    }
+
+    const targetPath = args[0];
+    const metricsOptions: MetricsOptions = {
+      format: (options.format || options.f || 'text') as 'text' | 'json',
+      category: (options.category) as string | undefined,
+      output: (options.output || options.o) as string | undefined,
+      quiet: options.quiet === true || options.q === true,
+      language: (options.language || options.l) ? normalizeLanguage((options.language || options.l) as string) : undefined,
+      excludeTests: options['exclude-tests'] === true,
+    };
+
+    await runMetrics(targetPath, metricsOptions);
     return;
   }
 

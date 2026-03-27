@@ -64,6 +64,7 @@ USAGE:
 
 COMMANDS:
   scan <path>     Scan files or directories for security vulnerabilities
+  metrics <path>  Report software quality metrics for files or directories
   init            Initialize a configuration file in your project
   version         Display version information
 
@@ -86,6 +87,18 @@ SCAN OPTIONS:
   -q, --quiet                Suppress progress output
   -v, --verbose              Show detailed output
 
+METRICS OPTIONS:
+  -l, --language <lang>      Analyze only files for language (bash|java|javascript|typescript|python|rust)
+  -f, --format <format>      Output format (text|json) [default: text]
+  --category <cats>          Filter by metric category (comma-separated):
+                               - Valid categories: complexity, size, coupling,
+                                 inheritance, cohesion, documentation, duplication
+                               - Example: "complexity" shows only complexity metrics
+                               - Example: "complexity,size" shows both categories
+  --exclude-tests            Exclude test files and directories
+  -o, --output <file>        Write results to file
+  -q, --quiet                Suppress progress output
+
 EXAMPLES:
   cognium scan src/
   cognium scan app.java -f json -o results.json
@@ -95,6 +108,10 @@ EXAMPLES:
   cognium scan . --category reliability,performance
   cognium scan . --exclude-cwe CWE-330,CWE-327
   cognium scan . --severity high --exclude-cwe CWE-601
+  cognium metrics src/
+  cognium metrics src/ --category complexity
+  cognium metrics src/ --category complexity,size --format json
+  cognium metrics src/ --language typescript -o metrics.json -f json
   cognium init
 
 For more information, visit: https://cognium.dev
