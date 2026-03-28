@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-03-28
+
+### Added
+
+- **6 new analysis passes** via circle-ir 3.13.0 — all surface findings during `cognium scan`:
+  - **`blocking-main-thread`** (CWE-1050, warning) — synchronous crypto/hashing operations
+    (`pbkdf2Sync`, `scryptSync`, `generateKeyPairSync`) and `*Sync` I/O calls inside HTTP request
+    handlers (NestJS decorators, Express `(req, res)`, handler method names); JS/TS only
+  - **`excessive-allocation`** (CWE-770, warning) — collection or object allocation inside loop
+    bodies (`new Map()`, `new ArrayList<>()`, `list()`, `Vec::new()`); all languages except Bash
+  - **`missing-stream`** (performance, note) — whole-file reads without streaming:
+    `readFileSync`/`response.text()` (JS/TS), `Files.readAllBytes`/`BufferedReader` (Java),
+    `f.read()` (Python); skips methods already using `.pipe()`/`createReadStream`/`for await`
+  - **`god-class`** (CWE-1060, warning) — class exceeding 2 of 3 CK metric thresholds:
+    WMC > 47, LCOM2 > 0.8, CBO > 14; Java/TS/Python
+  - **`naming-convention`** (maintainability, note) — PascalCase classes, camelCase methods,
+    UPPER_SNAKE_CASE constants (Java/TS), snake_case methods (Python/Bash/Rust); capped at 20
+    findings per file
+
+### Changed
+
+- **circle-ir upgraded 3.12.0 → 3.14.0**
+
+- **`missing-guard-dom` removed from the default scan pipeline** — this pass (added in v1.3.0)
+  produced high-severity false positives on any Java codebase using framework-level authorization
+  (Spring Security annotations, filter chains, servlet filters). Those guards are not visible as
+  intra-method call nodes in the CFG, so every sensitive operation was reported as unguarded
+  regardless of actual protection. The underlying analysis is being re-implemented in
+  circle-ir-ai with LLM-identified auth guards. `cognium scan` output is unaffected for
+  codebases not using that pass; users who were acting on `missing-guard-dom` findings should
+  treat prior results with caution.
+
+- **`feature-envy` removed from the default scan pipeline** — the call-count heuristic fired on
+  legitimate delegation patterns (facades, controllers, service orchestrators). Requires design
+  intent reasoning to distinguish from genuine feature envy; reserved for circle-ir-ai.
+
+- **`serial-await` fix hint is now advisory** — the suggestion no longer prescribes
+  `Promise.all()` directly; it reads "verify ordering requirements before parallelising" to
+  prevent incorrect refactors where the operations have semantic ordering constraints.
+
+[1.3.2]: https://github.com/cogniumhq/cognium/compare/v1.3.1...v1.3.2
+
 ## [1.3.1] - 2026-03-28
 
 ### Changed
