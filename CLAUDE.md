@@ -148,11 +148,11 @@ src/
 
 No new CLI flags or commands — behavior is purely automatic based on the input path.
 
-### Key Types from circle-ir (v3.9.1)
+### Key Types from circle-ir (v3.12.0)
 
 ```typescript
 // Per-file result (from analyze())
-CircleIR.findings?: SastFinding[]   // quality + reliability findings from 11-pass pipeline
+CircleIR.findings?: SastFinding[]   // quality + reliability findings from 36-pass pipeline
 
 // SastFinding interface (SARIF 2.1.0-aligned)
 interface SastFinding {
@@ -194,7 +194,7 @@ interface CrossFileData {
 ## Key Dependencies
 
 **Runtime**:
-- `circle-ir@^3.11.0`: Core SAST engine — 36-pass taint + quality analysis pipeline, 24 software quality metrics
+- `circle-ir@^3.12.0`: Core SAST engine — 36-pass taint + quality analysis pipeline, 24 software quality metrics
 
 **Development**:
 - `typescript@^6.0.2`: Type checking only (not used for builds)
