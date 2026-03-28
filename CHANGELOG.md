@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-03-28
+
+### Changed
+
+- **circle-ir upgraded 3.11.0 → 3.12.0** — internal improvements to Java receiver-type
+  resolution and test coverage:
+  - `JavaPlugin.getReceiverType()` now resolves identifier receivers by walking the parse tree
+    once and caching the result (`WeakMap<Tree, Map<string, string>>`). Generic types are stripped
+    (`List<String>` → `List`). This improves polymorphic sink matching for Java code that
+    declares a variable with a concrete type and later calls methods on it (e.g.
+    `PreparedStatement ps = …; ps.executeQuery(q)`).
+  - No API changes; all existing cognium commands and output formats are unaffected.
+
+[1.3.1]: https://github.com/cogniumhq/cognium/compare/v1.3.0...v1.3.1
+
 ## [1.3.0] - 2026-03-28
 
 ### Added
