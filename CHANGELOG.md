@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-28
+
+### Added
+
+- **Phase 4 analysis passes** via circle-ir 3.11.0 — four new passes now surface findings during
+  `cognium scan`:
+  - **`missing-guard-dom`** (CWE-285, error) — sensitive operations (delete, drop, executeUpdate,
+    grantRole, etc.) not dominated by an authentication/authorization check on all CFG paths (Java)
+  - **`cleanup-verify`** (CWE-772, warning) — resource cleanup does not post-dominate acquisition;
+    resource is left open on at least one CFG path (Java, Python, JS/TS)
+  - **`missing-override`** (warning) — method matches a parent class signature without `@Override`
+    annotation; typos in method names go undetected at compile time (Java)
+  - **`unused-interface-method`** (note) — interface method never called in this file; potential
+    dead API surface (Java, TypeScript)
+- **Rich help text for 15 additional passes** — `formatResults` now displays descriptions and
+  fix hints for all passes introduced since v1.2.3:
+  `infinite-loop`, `double-close`, `use-after-close`, `unhandled-exception`, `broad-catch`,
+  `swallowed-exception`, `redundant-loop-computation`, `unbounded-collection`, `serial-await`,
+  `react-inline-jsx`, `deep-inheritance`, `missing-guard-dom`, `cleanup-verify`,
+  `missing-override`, `unused-interface-method`
+- **TypeHierarchy wired into taint matching** (circle-ir 3.11.0) — `PreparedStatement.executeQuery()`
+  now correctly matches `Statement`-level sink configs; reduces false negatives in polymorphic
+  call chains
+
+### Changed
+
+- **circle-ir upgraded 3.9.8 → 3.11.0** — picks up all reliability, performance, and architecture
+  passes from v3.9.9 through v3.11.0, plus OWASP command injection fixes from v3.9.10/v3.10.0
+- **TypeScript upgraded 5.7 → 6.0.2** — uses latest type-checker; all strict checks remain clean
+- **`@types/node` upgraded 22 → 25**, **`bun-types` upgraded 1.2 → 1.3**
+
+[1.3.0]: https://github.com/cogniumhq/cognium/compare/v1.2.3...v1.3.0
+
 ## [1.2.3] - 2026-03-26
 
 ### Added

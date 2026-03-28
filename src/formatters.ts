@@ -178,6 +178,76 @@ const VULNERABILITY_HELP: Record<string, { description: string; fix: string }> =
   'orphan-module': {
     description: 'This module has no incoming import edges and is not a recognized entry point (index, main, app, server, or mod) — it may be dead code or accidentally disconnected',
     fix: 'Either import the module where its functionality is needed, mark it as an entry point, or delete it if it is truly unused'
+  },
+
+  // Reliability — dominator + exception flow passes (v3.9.8 / v3.9.9)
+  'infinite-loop': {
+    description: 'A CFG cycle has no reachable exit edge — the loop can never terminate and will hang the process',
+    fix: 'Add a guaranteed exit condition (break, return, or a counter-based bound) on every back-edge path'
+  },
+  'double-close': {
+    description: 'A resource is closed twice — both close() calls are reachable on at least one execution path, which typically throws an exception',
+    fix: 'Track whether the resource is already closed with a boolean flag, or use try-with-resources / context managers that prevent double-close'
+  },
+  'use-after-close': {
+    description: 'A method is called on a resource after close() has been invoked — the resource is in an undefined state and calls will throw',
+    fix: 'Move all resource usage before the close() call, or null-check and re-open the resource if reuse is intended'
+  },
+  'unhandled-exception': {
+    description: 'A throw/raise statement has no enclosing try/catch in the same function — the exception will propagate unchecked to callers',
+    fix: 'Wrap the throw in a try/catch block, declare the exception in the method signature (Java checked), or document that callers must handle it'
+  },
+  'broad-catch': {
+    description: 'catch(Exception) or a bare except catches more exception types than intended, masking unexpected errors and making debugging harder',
+    fix: 'Catch only the specific exception types you can handle; let unexpected exceptions propagate or log-and-rethrow'
+  },
+  'swallowed-exception': {
+    description: 'A catch block neither re-throws, logs, nor returns an error value — the exception is silently discarded and the failure goes undetected',
+    fix: 'At minimum log the exception; preferably re-throw, wrap in a runtime exception, or propagate as an error return value'
+  },
+
+  // Performance — v3.9.8 passes
+  'redundant-loop-computation': {
+    description: 'A loop-invariant expression (.length, .size(), Math.*) is recomputed on every iteration, performing unnecessary work',
+    fix: 'Hoist the invariant computation into a variable before the loop: `const len = arr.length; for (let i = 0; i < len; i++)`'
+  },
+  'unbounded-collection': {
+    description: 'A collection grows inside a loop with no size check or clear() call — can cause unbounded memory growth under high load',
+    fix: 'Add a size cap (if (list.size() >= MAX) break), batch-flush the collection inside the loop, or switch to a bounded data structure'
+  },
+  'serial-await': {
+    description: 'Sequential await calls with no data dependency between them run operations serially when they could run concurrently',
+    fix: 'Replace sequential awaits with Promise.all([...]) to run independent async operations in parallel'
+  },
+  'react-inline-jsx': {
+    description: 'An inline object literal or arrow function in JSX props creates a new reference on every render, defeating React.memo and causing unnecessary re-renders',
+    fix: 'Move the object/function outside the component or wrap it with useMemo/useCallback to stabilize the reference'
+  },
+
+  // Architecture — v3.9.8 passes
+  'deep-inheritance': {
+    description: 'The inheritance chain exceeds 5 levels — deep hierarchies increase coupling, make behaviour hard to reason about, and complicate testing',
+    fix: 'Prefer composition over inheritance; flatten the hierarchy by extracting shared behaviour into collaborating objects or mixins'
+  },
+
+  // Reliability — v3.11.0 passes
+  'missing-guard-dom': {
+    description: 'A sensitive operation (delete, drop, executeUpdate, grantRole, etc.) is not dominated by an authentication or authorization check on all CFG paths — unauthenticated callers may reach it',
+    fix: 'Add an authentication/authorization check that dominates all paths to the sensitive operation; throw or redirect immediately on failure'
+  },
+  'cleanup-verify': {
+    description: 'Resource cleanup (close(), disconnect(), release()) does not post-dominate the acquisition — on at least one execution path the resource is left open',
+    fix: 'Use try-with-resources (Java) or a finally block to guarantee cleanup on all paths, including exception paths'
+  },
+
+  // Architecture — v3.11.0 passes
+  'missing-override': {
+    description: 'A method matches a parent class method signature but lacks the @Override annotation — the intent to override is unclear and typos in the method name go undetected',
+    fix: 'Add @Override to make the intent explicit; the compiler will then catch signature mismatches'
+  },
+  'unused-interface-method': {
+    description: 'An interface method is never called anywhere in this file — it may be dead API surface that inflates the public contract',
+    fix: 'Remove the method if it is truly unused, or verify that it is called from other files; reduce interface surface to the minimum needed'
   }
 };
 
