@@ -194,12 +194,12 @@ interface CrossFileData {
 ## Key Dependencies
 
 **Runtime**:
-- `circle-ir@^3.9.1`: Core SAST engine (high-performance taint analysis library, v3.9.1 exports `analyzeProject()`)
+- `circle-ir@^3.11.0`: Core SAST engine — 36-pass taint + quality analysis pipeline, 24 software quality metrics
 
 **Development**:
-- `typescript@^5.7.0`: Type checking only (not used for builds)
-- `@types/node@^22.0.0`: Node.js types
-- `bun-types@^1.2.0`: Bun runtime types
+- `typescript@^6.0.2`: Type checking only (not used for builds)
+- `@types/node@^25.5.0`: Node.js types
+- `bun-types@^1.3.11`: Bun runtime types
 
 **Zero Dependencies for UI/UX**:
 - All CLI features (colors, spinners, argument parsing) use custom zero-dependency utilities

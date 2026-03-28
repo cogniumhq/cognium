@@ -34,8 +34,18 @@ cognium scan ./src --format json
 # Show only critical vulnerabilities
 cognium scan ./src --severity critical
 
+# Security findings only (skip quality/reliability passes)
+cognium scan ./src --category security
+
+# Exclude specific CWEs (e.g. weak crypto noise)
+cognium scan ./src --exclude-cwe CWE-327,CWE-330
+
 # Exclude test files
 cognium scan ./src --exclude-tests
+
+# Software quality metrics
+cognium metrics ./src
+cognium metrics ./src --category complexity,coupling --format json
 ```
 
 ## Commands
@@ -48,13 +58,16 @@ Scan files or directories for security vulnerabilities.
 cognium scan <path> [options]
 
 Options:
-  -l, --language <lang>      Force language (java|javascript|typescript|python|rust)
+  -l, --language <lang>      Force language (java|javascript|typescript|python|rust|bash)
   -f, --format <format>      Output format (text|json|sarif) [default: text]
   --threads <n>              Parallel analysis threads [default: 4]
   --severity <level>         Filter by severity:
                                - Single level: minimum severity (e.g., "high" shows high+critical)
                                - Multiple levels: exact match (e.g., "critical,high" shows only those)
                                - Valid levels: low, medium, high, critical
+  --category <cats>          Filter by ISO 25010 category (comma-separated):
+                               security, reliability, performance, maintainability, architecture
+  --exclude-cwe <cwes>       Exclude specific CWEs (comma-separated, e.g. CWE-330,CWE-327)
   --exclude-tests            Exclude test files and directories
   -o, --output <file>        Write results to file
   -q, --quiet                Suppress progress output
@@ -72,6 +85,15 @@ cognium scan ./src --severity critical,high
 
 # Exclude test files and show only critical issues
 cognium scan ./src --exclude-tests --severity critical
+
+# Security findings only (skip quality/reliability passes)
+cognium scan ./src --category security
+
+# Reliability + performance findings only
+cognium scan ./src --category reliability,performance
+
+# Exclude weak-crypto and weak-random findings
+cognium scan ./src --exclude-cwe CWE-327,CWE-330
 
 # Generate SARIF report for CI/CD
 cognium scan ./src --format sarif --output results.sarif
@@ -92,6 +114,67 @@ cognium init
 ```
 
 Creates a `cognium.config.json` with customizable rules.
+
+### `cognium metrics <path>`
+
+Report software quality metrics for files or directories.
+
+```bash
+cognium metrics <path> [options]
+
+Options:
+  -l, --language <lang>      Analyze only files for the given language
+  -f, --format <format>      Output format (text|json) [default: text]
+  --category <cats>          Filter metric categories (comma-separated):
+                               complexity, size, coupling, inheritance,
+                               cohesion, documentation, duplication
+  --exclude-tests            Skip test files and directories
+  -o, --output <file>        Write results to file
+  -q, --quiet                Suppress per-file progress output
+```
+
+**Examples:**
+
+```bash
+# Show all metrics for a directory
+cognium metrics ./src
+
+# Complexity and coupling metrics only
+cognium metrics ./src --category complexity,coupling
+
+# JSON output for tooling integration
+cognium metrics ./src --format json --output metrics.json
+
+# Java files only, skip tests
+cognium metrics ./src --language java --exclude-tests
+```
+
+**Sample output:**
+
+```
+src/UserController.java
+  Complexity
+    cyclomatic_complexity : 8.2
+    WMC                   : 41
+    halstead_volume       : 3820.4
+
+  Size
+    LOC                   : 182
+    NLOC                  : 156
+    function_count        : 9
+
+  Coupling
+    CBO                   : 6
+    RFC                   : 22
+
+  Composite Scores
+    maintainability_index : 68.4 / 100
+    code_quality_index    : 71.2 / 100
+    bug_hotspot_score     : 32.1 / 100
+    refactoring_roi       : 45.0 / 100
+```
+
+Available metrics: `cyclomatic_complexity`, `WMC`, `halstead_volume`, `halstead_difficulty`, `halstead_effort`, `halstead_bugs`, `LOC`, `NLOC`, `comment_density`, `function_count`, `CBO`, `RFC`, `DIT`, `NOC`, `LCOM`, `doc_coverage`, `maintainability_index`, `code_quality_index`, `bug_hotspot_score`, `refactoring_roi`.
 
 ### `cognium version`
 
@@ -146,6 +229,37 @@ Use `-v` flag to see all scanned files including clean ones.
 | Weak Hash | CWE-327 | Low | Weak hashing algorithm |
 | Weak Crypto | CWE-327 | Low | Weak cryptographic algorithm |
 | Insecure Cookie | CWE-614 | Low | Cookie without security flags |
+
+## Code Quality Analysis
+
+In addition to security vulnerabilities, `cognium scan` runs 17 code quality passes and reports findings in five ISO 25010 categories:
+
+| Category | Rule IDs | Example Issues |
+|----------|----------|----------------|
+| **Reliability** | `null-deref`, `resource-leak`, `unchecked-return`, `dead-code`, `variable-shadowing`, `leaked-global`, `unused-variable`, `infinite-loop`, `double-close`, `use-after-close`, `unhandled-exception`, `broad-catch`, `swallowed-exception`, `missing-guard-dom`, `cleanup-verify` | Null pointer dereferences, unclosed streams, swallowed exceptions |
+| **Performance** | `n-plus-one`, `redundant-loop-computation`, `unbounded-collection`, `serial-await`, `react-inline-jsx` | N+1 DB queries, unnecessary work inside loops |
+| **Maintainability** | `missing-public-doc`, `todo-in-prod`, `stale-doc-ref` | Missing Javadoc/JSDoc, TODO comments in production code |
+| **Architecture** | `circular-dependency`, `orphan-module`, `dependency-fan-out`, `deep-inheritance`, `missing-override`, `unused-interface-method` | Circular imports, overly deep class hierarchies |
+
+Quality findings appear alongside security findings in text output with their category tag:
+
+```
+src/UserService.java
+  [!!] sql_injection (Critical) [CWE-89]
+      ...
+  [!] null-deref [reliability] (High) [CWE-476]
+      Line 34: Return value of findById() is dereferenced without a null check
+      → Fix: Check for null before dereferencing or use Optional<T>
+  [i] missing-public-doc [maintainability] (Low)
+      Line 12: Public method processRequest() has no Javadoc
+
+Found 1 security finding(s) in 1 file(s)
+Also found 2 code quality finding(s) in 1 file(s)
+```
+
+**Exit codes:** The CLI exits `1` only when **security** findings are present (so CI pipelines gate on vulnerabilities without being blocked by documentation or style findings). Quality-only scans exit `0`.
+
+Filter to security findings only: `cognium scan ./src --category security`
 
 ## Supported Languages
 
@@ -264,21 +378,24 @@ fi
 
 | Code | Meaning |
 |------|---------|
-| 0 | No vulnerabilities found |
-| 1 | Vulnerabilities found |
+| 0 | No security findings (quality-only findings do not trigger exit 1) |
+| 1 | One or more security vulnerabilities found |
 | 2 | Error during analysis |
 
-Use exit codes in CI/CD to fail builds when vulnerabilities are detected:
+Use exit codes in CI/CD to fail builds when security vulnerabilities are detected:
 
 ```bash
-# Fail build on any vulnerability
+# Fail build on any security finding
 cognium scan ./src || exit 1
 
-# Fail build only on critical/high
+# Fail build only on critical/high security findings
 cognium scan ./src --severity high || exit 1
 
-# Fail build only on critical
+# Fail build only on critical security findings
 cognium scan ./src --severity critical || exit 1
+
+# Never fail on quality-only issues (always exit 0 for docs/style findings)
+cognium scan ./src --category reliability,performance,maintainability,architecture; echo "Quality scan done (exit $?)"
 ```
 
 ## Performance
