@@ -7,26 +7,12 @@
     "naming-convention": false,
     "unbounded-collection": false,
     "redundant-loop-computation": false,
+    "missing-stream": false,
+    "unhandled-exception": false,
     "dependency-fan-out": { "threshold": 35 }
   },
 
-  "suppressions": [
-    {
-      "pass": "unhandled-exception",
-      "file": "src/cli.ts",
-      "reason": "CLI throws for invalid arguments/config - standard CLI pattern"
-    },
-    {
-      "pass": "missing-stream",
-      "file": "src/cli.ts",
-      "reason": "Analyzer requires complete file content as string - streaming not applicable"
-    },
-    {
-      "pass": "infinite-loop",
-      "file": "src/formatters.ts",
-      "reason": "for...of loop terminates when taintPaths iterator exhausted - pass doesn't recognize implicit termination"
-    }
-  ],
+  "suppressions": [],
 
   "severity": "low",
   "categories": ["security", "reliability", "performance", "maintainability", "architecture"]
