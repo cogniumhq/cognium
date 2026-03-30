@@ -318,7 +318,48 @@ function fileMatchesLanguage(filePath: string, language?: string): boolean {
   return detected === normalizeLanguage(language);
 }
 
-async function collectFiles(targetPath: string, language?: string, excludeTests = false): Promise<string[]> {
+/**
+ * Simple glob pattern matching for include/exclude patterns.
+ * Supports: ** (any path), * (any segment), ? (any single char)
+ */
+function matchesGlob(filePath: string, pattern: string): boolean {
+  // Normalize separators
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const normalizedPattern = pattern.replace(/\\/g, '/');
+
+  // Convert glob to regex
+  let regex = normalizedPattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape special regex chars (except * and ?)
+    .replace(/\*\*/g, '{{GLOBSTAR}}')       // Temporarily replace **
+    .replace(/\*/g, '[^/]*')                // * matches anything except /
+    .replace(/\?/g, '.')                    // ? matches any single char
+    .replace(/\{\{GLOBSTAR\}\}/g, '.*');    // ** matches anything including /
+
+  // Match from start for patterns starting with **, otherwise require path boundary
+  if (!normalizedPattern.startsWith('**/')) {
+    regex = '^' + regex;
+  }
+
+  return new RegExp(regex + '$').test(normalizedPath);
+}
+
+/**
+ * Check if a file path matches any pattern in a list.
+ */
+function matchesAnyPattern(filePath: string, patterns: string[]): boolean {
+  return patterns.some(pattern => matchesGlob(filePath, pattern));
+}
+
+interface CollectFilesOptions {
+  language?: string;
+  excludeTests?: boolean;
+  includePatterns?: string[];
+  excludePatterns?: string[];
+  basePath?: string;
+}
+
+async function collectFiles(targetPath: string, options: CollectFilesOptions = {}): Promise<string[]> {
+  const { language, excludeTests = false, includePatterns, excludePatterns, basePath } = options;
   const files: string[] = [];
   const pathStat = await stat(targetPath);
 
@@ -328,6 +369,16 @@ async function collectFiles(targetPath: string, language?: string, excludeTests 
       return files;
     }
     if (fileMatchesLanguage(targetPath, language)) {
+      // Apply include/exclude patterns
+      const relativePath = basePath ? relative(basePath, targetPath) : targetPath;
+      if (includePatterns && includePatterns.length > 0) {
+        if (!matchesAnyPattern(relativePath, includePatterns)) {
+          return files;
+        }
+      }
+      if (excludePatterns && matchesAnyPattern(relativePath, excludePatterns)) {
+        return files;
+      }
       files.push(targetPath);
     }
   } else if (pathStat.isDirectory()) {
@@ -336,8 +387,19 @@ async function collectFiles(targetPath: string, language?: string, excludeTests 
       if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
       // Skip test directories if excludeTests is enabled
       if (excludeTests && /^(test|tests|__tests__|spec|__mocks__)$/i.test(entry.name)) continue;
+
+      // Check if directory matches exclude patterns (e.g., dist/**)
       const fullPath = join(targetPath, entry.name);
-      files.push(...await collectFiles(fullPath, language, excludeTests));
+      const relativePath = basePath ? relative(basePath, fullPath) : fullPath;
+      if (excludePatterns && entry.isDirectory()) {
+        // Check if the directory itself should be excluded
+        const dirPattern = relativePath + '/';
+        if (excludePatterns.some(p => matchesGlob(dirPattern, p) || matchesGlob(relativePath, p))) {
+          continue;
+        }
+      }
+
+      files.push(...await collectFiles(fullPath, { ...options, basePath: basePath || targetPath }));
     }
   }
 
@@ -549,7 +611,13 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
       process.exit(2);
     }
 
-    const files = await collectFiles(absPath, options.language, options.excludeTests);
+    const files = await collectFiles(absPath, {
+      language: options.language,
+      excludeTests: options.excludeTests,
+      includePatterns: config?.include,
+      excludePatterns: config?.exclude,
+      basePath: absPath,
+    });
 
     if (files.length === 0) {
       if (spin) spin.warn('No supported files found');
@@ -777,6 +845,9 @@ function fmtMetricValue(value: number, unit?: string): string {
 async function runMetrics(targetPath: string, options: MetricsOptions): Promise<void> {
   const spin = options.quiet ? null : spinner('Initializing analyzer...').start();
 
+  // Load config for include/exclude patterns
+  const config = loadConfig();
+
   try {
     // Initialize WASM (same as runScan)
     const isStandalone = import.meta.url.includes('/$bunfs/');
@@ -853,7 +924,13 @@ async function runMetrics(targetPath: string, options: MetricsOptions): Promise<
       process.exit(2);
     }
 
-    const files = await collectFiles(absPath, options.language, options.excludeTests);
+    const files = await collectFiles(absPath, {
+      language: options.language,
+      excludeTests: options.excludeTests,
+      includePatterns: config?.include,
+      excludePatterns: config?.exclude,
+      basePath: absPath,
+    });
 
     if (files.length === 0) {
       if (spin) spin.warn('No supported files found');
