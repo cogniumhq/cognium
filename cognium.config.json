@@ -9,6 +9,7 @@
     "redundant-loop-computation": false,
     "missing-stream": false,
     "unhandled-exception": false,
+    "orphan-module": false,
     "dependency-fan-out": { "threshold": 35 }
   },
 
