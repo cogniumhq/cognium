@@ -3,20 +3,180 @@
  * cognium CLI - AI-powered static analysis for security vulnerabilities
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { stat, readdir } from 'fs/promises';
-import { join, extname, resolve, relative } from 'path';
+import { join, extname, resolve, relative, dirname } from 'path';
 import {
   initAnalyzer, analyze, analyzeProject,
   type SinkType, type SastFinding, type SupportedLanguage,
   type TaintPath, type CrossFileCall,
   type MetricValue, type FileMetrics,
+  type PassOptions,
 } from 'circle-ir';
 import { formatResults, formatJSON, formatSARIF } from './formatters.js';
 import { version } from './version.js';
 import { parseArgs, showHelp, showVersion } from './utils/args.js';
 import { spinner } from './utils/spinner.js';
 import { colors } from './utils/colors.js';
+
+// =============================================================================
+// Configuration Types
+// =============================================================================
+
+/**
+ * Suppression entry to exclude specific findings.
+ */
+interface Suppression {
+  /** Pass name to suppress (e.g., 'naming-convention', 'unbounded-collection') */
+  pass: string;
+  /** File path (relative or absolute) — if omitted, applies to all files */
+  file?: string;
+  /** Specific line number — if omitted, applies to all lines in the file */
+  line?: number;
+  /** Reason for suppression (for documentation) */
+  reason?: string;
+}
+
+/**
+ * cognium.config.json schema
+ */
+interface CogniumConfig {
+  /** Config version for future compatibility */
+  version?: string;
+  /** Glob patterns to include */
+  include?: string[];
+  /** Glob patterns to exclude */
+  exclude?: string[];
+  /** Pass-specific options (passed to circle-ir) */
+  passes?: {
+    [passName: string]: boolean | {
+      enabled?: boolean;
+      threshold?: number;
+      skipPatterns?: string[];
+      [key: string]: unknown;
+    };
+  };
+  /** Findings to suppress */
+  suppressions?: Suppression[];
+  /** Minimum severity filter */
+  severity?: string;
+  /** Category filter */
+  categories?: string[];
+}
+
+/**
+ * Load configuration from cognium.config.json or a custom profile path.
+ */
+function loadConfig(profilePath?: string): CogniumConfig | null {
+  const configPath = profilePath || 'cognium.config.json';
+
+  if (!existsSync(configPath)) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(configPath, 'utf-8');
+    return JSON.parse(content) as CogniumConfig;
+  } catch (err) {
+    console.error(colors.yellow(`Warning: Failed to parse ${configPath}: ${err}`));
+    return null;
+  }
+}
+
+/**
+ * Convert config passes to circle-ir PassOptions and disabledPasses.
+ */
+function convertConfigToPassOptions(config: CogniumConfig): {
+  passOptions: PassOptions;
+  disabledPasses: string[];
+} {
+  const passOptions: PassOptions = {};
+  const disabledPasses: string[] = [];
+
+  if (!config.passes) {
+    return { passOptions, disabledPasses };
+  }
+
+  for (const [passName, passConfig] of Object.entries(config.passes)) {
+    // Boolean false = disabled
+    if (passConfig === false) {
+      disabledPasses.push(passName);
+      continue;
+    }
+
+    // Boolean true = enabled with defaults
+    if (passConfig === true) {
+      continue;
+    }
+
+    // Object config
+    if (typeof passConfig === 'object') {
+      if (passConfig.enabled === false) {
+        disabledPasses.push(passName);
+        continue;
+      }
+
+      // Map pass-specific options
+      switch (passName) {
+        case 'dependency-fan-out':
+          if (passConfig.threshold !== undefined) {
+            passOptions.dependencyFanOut = { threshold: passConfig.threshold };
+          }
+          break;
+        case 'unbounded-collection':
+          if (passConfig.skipPatterns !== undefined) {
+            passOptions.unboundedCollection = { skipPatterns: passConfig.skipPatterns as string[] };
+          }
+          break;
+        case 'naming-convention':
+          if (passConfig.enforceIPrefix !== undefined) {
+            passOptions.namingConvention = { enforceIPrefix: passConfig.enforceIPrefix as boolean };
+          }
+          break;
+      }
+    }
+  }
+
+  return { passOptions, disabledPasses };
+}
+
+/**
+ * Apply suppressions to filter out findings.
+ */
+function applySuppressionsToResults(
+  results: ScanResult[],
+  suppressions: Suppression[],
+  basePath: string,
+): ScanResult[] {
+  if (suppressions.length === 0) return results;
+
+  return results.map(result => {
+    const relativeFile = relative(basePath, result.file) || result.file;
+
+    const filteredVulns = result.vulnerabilities.filter(vuln => {
+      // Check each suppression
+      for (const supp of suppressions) {
+        // Pass must match
+        if (supp.pass !== vuln.type) continue;
+
+        // If file specified, it must match
+        if (supp.file) {
+          const suppFile = supp.file.replace(/^\.\//, ''); // normalize
+          if (suppFile !== relativeFile && suppFile !== result.file) continue;
+        }
+
+        // If line specified, it must match
+        if (supp.line !== undefined && supp.line !== vuln.line) continue;
+
+        // All conditions matched — suppress this finding
+        return false;
+      }
+      return true;
+    });
+
+    return { ...result, vulnerabilities: filteredVulns };
+  });
+}
 
 // Test file/directory patterns to exclude
 const TEST_PATTERNS = [
@@ -64,6 +224,8 @@ interface ScanOptions {
   verbose?: boolean;
   excludeTests?: boolean;
   excludeCwe?: string;
+  /** Path to config file (default: cognium.config.json) */
+  profile?: string;
 }
 
 interface MetricsOptions {
@@ -182,10 +344,18 @@ async function collectFiles(targetPath: string, language?: string, excludeTests 
   return files;
 }
 
-async function scanFile(filePath: string, language: string): Promise<ScanResult> {
+interface AnalyzeOptions {
+  passOptions?: PassOptions;
+  disabledPasses?: string[];
+}
+
+async function scanFile(filePath: string, language: string, analyzeOpts?: AnalyzeOptions): Promise<ScanResult> {
   try {
     const code = readFileSync(filePath, 'utf-8');
-    const result = await analyze(code, filePath, language as any);
+    const result = await analyze(code, filePath, language as any, {
+      passOptions: analyzeOpts?.passOptions,
+      disabledPasses: analyzeOpts?.disabledPasses,
+    });
 
     // Security findings from taint flows
     const vulnerabilities: ScanResult['vulnerabilities'] = (result.taint.flows || []).map(flow => ({
@@ -223,6 +393,7 @@ async function scanFile(filePath: string, language: string): Promise<ScanResult>
 async function scanProject(
   files: string[],
   language: string | undefined,
+  analyzeOpts?: AnalyzeOptions,
 ): Promise<{ results: ScanResult[]; crossFileData: CrossFileData }> {
   const filesWithCode = files.map(f => ({
     code: readFileSync(f, 'utf-8'),
@@ -230,7 +401,10 @@ async function scanProject(
     language: (language || detectLanguage(f)) as SupportedLanguage,
   }));
 
-  const projectResult = await analyzeProject(filesWithCode);
+  const projectResult = await analyzeProject(filesWithCode, {
+    passOptions: analyzeOpts?.passOptions,
+    disabledPasses: analyzeOpts?.disabledPasses,
+  });
 
   const results: ScanResult[] = projectResult.files.map(({ file, analysis }) => {
     const vulnerabilities: ScanResult['vulnerabilities'] = (analysis.taint.flows || []).map(flow => ({
@@ -266,6 +440,23 @@ async function scanProject(
 
 async function runScan(targetPath: string, options: ScanOptions): Promise<void> {
   const spin = options.quiet ? null : spinner('Initializing analyzer...').start();
+
+  // Load configuration from profile or default cognium.config.json
+  const config = loadConfig(options.profile);
+  let passOptions: PassOptions = {};
+  let disabledPasses: string[] = [];
+  let suppressions: Suppression[] = [];
+
+  if (config) {
+    const converted = convertConfigToPassOptions(config);
+    passOptions = converted.passOptions;
+    disabledPasses = converted.disabledPasses;
+    suppressions = config.suppressions ?? [];
+
+    if (!options.quiet) {
+      console.log(colors.dim(`Loaded config: ${options.profile || 'cognium.config.json'}`));
+    }
+  }
 
   try {
     // Initialize circle-ir with appropriate WASM paths
@@ -368,9 +559,12 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     let results: ScanResult[];
     let crossFileData: CrossFileData | undefined;
 
+    // Prepare analyze options from config
+    const analyzeOpts: AnalyzeOptions = { passOptions, disabledPasses };
+
     if ((await stat(absPath)).isDirectory()) {
       if (spin) spin.text = `Running project analysis on ${files.length} file(s)...`;
-      const projectScan = await scanProject(files, options.language);
+      const projectScan = await scanProject(files, options.language, analyzeOpts);
       results = projectScan.results;
       crossFileData = projectScan.crossFileData;
     } else {
@@ -394,7 +588,7 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
             const lang = options.language || detectLanguage(file);
             if (!lang) return null;
             if (spin) spin.text = `Scanning ${formatCurrentFile(file)}... (${processed}/${files.length})`;
-            return scanFile(file, lang);
+            return scanFile(file, lang, analyzeOpts);
           })
         );
 
@@ -408,6 +602,17 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     }
 
     if (spin) spin.succeed(`Scanned ${files.length} file(s)`);
+
+    // Apply suppressions from config
+    // Use cwd as base path since suppression files are relative to project root
+    if (suppressions.length > 0) {
+      const beforeCount = results.reduce((sum, r) => sum + r.vulnerabilities.length, 0);
+      results = applySuppressionsToResults(results, suppressions, process.cwd());
+      const afterCount = results.reduce((sum, r) => sum + r.vulnerabilities.length, 0);
+      if (!options.quiet && beforeCount !== afterCount) {
+        console.log(colors.dim(`Suppressed ${beforeCount - afterCount} finding(s) via config`));
+      }
+    }
 
     // Filter by severity if specified
     const severityOrder = ['low', 'medium', 'high', 'critical'];
@@ -855,6 +1060,7 @@ async function main(): Promise<void> {
       verbose: options.verbose === true || options.v === true,
       excludeTests: options['exclude-tests'] === true,
       excludeCwe: (options['exclude-cwe']) as string | undefined,
+      profile: (options.profile || options.p) as string | undefined,
     };
 
     await runScan(targetPath, scanOptions);

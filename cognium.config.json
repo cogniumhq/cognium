@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/node_modules/**", "**/dist/**"],
+
+  "passes": {
+    "naming-convention": false,
+    "dependency-fan-out": {
+      "threshold": 31
+    },
+    "unbounded-collection": {
+      "skipPatterns": ["vulnerabilities", "fileMetricsList", "results"]
+    }
+  },
+
+  "suppressions": [
+    {
+      "pass": "unhandled-exception",
+      "file": "src/cli.ts",
+      "reason": "CLI intentionally throws for argument validation errors"
+    },
+    {
+      "pass": "infinite-loop",
+      "file": "src/formatters.ts",
+      "line": 301,
+      "reason": "Loop terminates via visited set check preventing infinite recursion"
+    }
+  ],
+
+  "severity": "low",
+  "categories": ["security", "reliability", "performance"]
+}

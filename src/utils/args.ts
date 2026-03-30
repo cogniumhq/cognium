@@ -83,6 +83,7 @@ SCAN OPTIONS:
                                - Example: "reliability,performance" shows both categories
   --exclude-cwe <cwes>       Exclude specific CWEs (comma-separated, e.g., "CWE-330,CWE-327")
   --exclude-tests            Exclude test files and directories
+  --profile <file>           Load config from file [default: cognium.config.json]
   -o, --output <file>        Write results to file
   -q, --quiet                Suppress progress output
   -v, --verbose              Show detailed output
@@ -108,6 +109,7 @@ EXAMPLES:
   cognium scan . --category reliability,performance
   cognium scan . --exclude-cwe CWE-330,CWE-327
   cognium scan . --severity high --exclude-cwe CWE-601
+  cognium scan . --profile custom-config.json
   cognium metrics src/
   cognium metrics src/ --category complexity
   cognium metrics src/ --category complexity,size --format json
