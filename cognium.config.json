@@ -23,7 +23,29 @@
       "pass": "infinite-loop",
       "file": "src/formatters.ts",
       "line": 301,
-      "reason": "Loop terminates via visited set check preventing infinite recursion"
+      "reason": "Loop terminates when taintPaths iterator is exhausted"
+    },
+    {
+      "pass": "missing-stream",
+      "file": "src/cli.ts",
+      "reason": "readFileSync is appropriate - analyzer requires complete file content as string"
+    },
+    {
+      "pass": "unbounded-collection",
+      "file": "src/formatters.ts",
+      "reason": "lines array is bounded by taintPaths.length which is finite input"
+    },
+    {
+      "pass": "redundant-loop-computation",
+      "file": "src/formatters.ts",
+      "line": 311,
+      "reason": "p.hops.length is NOT loop-invariant - p changes each iteration"
+    },
+    {
+      "pass": "redundant-loop-computation",
+      "file": "src/cli.ts",
+      "line": 875,
+      "reason": "rel.length is NOT loop-invariant - rel is computed fresh each iteration from file"
     }
   ],
 

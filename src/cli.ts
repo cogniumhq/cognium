@@ -863,6 +863,7 @@ async function runMetrics(targetPath: string, options: MetricsOptions): Promise<
     // Collect metrics per file
     const fileMetricsList: FileMetrics[] = [];
     let processed = 0;
+    const totalFiles = files.length;
 
     for (const file of files) {
       const lang = options.language || detectLanguage(file);
@@ -870,8 +871,9 @@ async function runMetrics(targetPath: string, options: MetricsOptions): Promise<
 
       if (spin) {
         const rel = relative(absPath, file) || file;
-        const label = rel.length > 80 ? `...${rel.slice(-77)}` : rel;
-        spin.text = `Analyzing ${label}... (${processed}/${files.length})`;
+        const maxLen = 80;
+        const label = rel.length > maxLen ? `...${rel.slice(-(maxLen - 3))}` : rel;
+        spin.text = `Analyzing ${label}... (${processed}/${totalFiles})`;
       }
 
       try {
