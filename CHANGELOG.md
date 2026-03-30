@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-03-29
+
+### Changed
+
+- **circle-ir upgraded 3.14.0 → 3.15.0** — improved accuracy for three high-impact passes:
+  - **`null-deref`** — now recognizes Java assertion guards (`assert x != null`), `Objects.requireNonNull()`, Guava `Preconditions.checkNotNull()`, Spring `Assert.notNull()`, and JUnit/TestNG `assertNotNull()` — reducing false positives when developers use assertion-based or utility-method null checks
+  - **`n-plus-one`** — expanded medium-confidence receiver detection with suffix matching (`*Repository`, `*Repo`, `*Dao`, `*Service`, `*Client`, `*Store`, `*Cache`, `*Gateway`, `*Mapper`, etc.) — catches `userRepository.find()` and similar custom repository patterns that were previously missed
+  - **`sink-filter` (XSS)** — added sanitizer detection (DOMPurify, sanitizeHtml, escapeHtml, validator.escape, Angular bypassSecurityTrust), string literal suppression (`.innerHTML = "static"` no longer flagged), and constant propagation integration — reducing false positives on safe DOM assignments
+
+### Release notes
+
+Version 1.4.0 brings improved pass accuracy from circle-ir 3.15.0, reducing both false positives and false negatives across null-deref, N+1 query, and XSS detection.
+
+[1.4.0]: https://github.com/cogniumhq/cognium/compare/v1.3.2...v1.4.0
+
 ## [1.3.2] - 2026-03-28
 
 ### Added
