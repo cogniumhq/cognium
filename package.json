@@ -15,6 +15,7 @@
     "clean": "rm -rf dist cognium cognium-* *.bun-build wasm",
     "typecheck": "tsc --noEmit",
     "version": "node -e \"const v = require('./package.json').version; require('fs').writeFileSync('src/version.ts', '/**\\n * Version information\\n *\\n * Kept in sync with package.json via the \\`version\\` npm lifecycle script.\\n * Do not edit manually — use \\`npm version patch|minor|major\\` instead.\\n */\\nexport const version = \\x27' + v + '\\x27;\\n')\" && git add src/version.ts",
+    "dogfood": "bun run src/cli.ts scan src/ -q",
     "prepublishOnly": "bun run build",
     "release": "bash release.sh"
   },
@@ -64,7 +65,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "circle-ir": "^3.16.3"
+    "circle-ir": "^3.16.5"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

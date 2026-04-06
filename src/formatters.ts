@@ -3,9 +3,12 @@
  */
 
 import { colors } from './utils/colors.js';
+import { version } from './version.js';
 import type { TaintPath, CrossFileCall, SinkType } from 'circle-ir';
 
-interface Vulnerability {
+// ─── Shared types (canonical definitions, imported by cli.ts) ────────────────
+
+export interface Vulnerability {
   type: string;
   severity: string;
   message: string;
@@ -14,14 +17,63 @@ interface Vulnerability {
   /** Instance-specific fix forwarded from SastFinding.fix; takes precedence over VULNERABILITY_HELP */
   fix?: string;
   /** ISO 25010 category: security | reliability | performance | maintainability | architecture */
-  category?: string;
+  category: string;
 }
 
-interface ScanResult {
+export interface ScanResult {
   file: string;
   vulnerabilities: Vulnerability[];
   error?: string;
 }
+
+export interface CrossFileData {
+  taintPaths: TaintPath[];
+  crossFileCalls: CrossFileCall[];
+}
+
+export const SINK_SEVERITY: Record<SinkType, string> = {
+  sql_injection: 'critical',
+  nosql_injection: 'high',
+  command_injection: 'critical',
+  path_traversal: 'high',
+  xss: 'high',
+  xxe: 'critical',
+  deserialization: 'critical',
+  ldap_injection: 'high',
+  xpath_injection: 'high',
+  ssrf: 'high',
+  open_redirect: 'medium',
+  code_injection: 'critical',
+  log_injection: 'medium',
+  weak_random: 'low',
+  weak_hash: 'low',
+  weak_crypto: 'low',
+  insecure_cookie: 'low',
+  trust_boundary: 'medium',
+  external_taint_escape: 'medium',
+};
+
+export const SINK_CWE: Record<SinkType, string> = {
+  sql_injection: 'CWE-89',
+  nosql_injection: 'CWE-943',
+  command_injection: 'CWE-78',
+  path_traversal: 'CWE-22',
+  xss: 'CWE-79',
+  xxe: 'CWE-611',
+  deserialization: 'CWE-502',
+  ldap_injection: 'CWE-90',
+  xpath_injection: 'CWE-643',
+  ssrf: 'CWE-918',
+  open_redirect: 'CWE-601',
+  code_injection: 'CWE-94',
+  log_injection: 'CWE-117',
+  weak_random: 'CWE-330',
+  weak_hash: 'CWE-327',
+  weak_crypto: 'CWE-327',
+  insecure_cookie: 'CWE-614',
+  trust_boundary: 'CWE-501',
+  external_taint_escape: 'CWE-20',
+};
 
 // Help text for each vulnerability type
 const VULNERABILITY_HELP: Record<string, { description: string; fix: string }> = {
@@ -248,7 +300,33 @@ const VULNERABILITY_HELP: Record<string, { description: string; fix: string }> =
   'unused-interface-method': {
     description: 'An interface method is never called anywhere in this file — it may be dead API surface that inflates the public contract',
     fix: 'Remove the method if it is truly unused, or verify that it is called from other files; reduce interface surface to the minimum needed'
-  }
+  },
+
+  // Performance — v3.14.0 passes
+  'blocking-main-thread': {
+    description: 'A blocking call (crypto.pbkdf2Sync, readFileSync, etc.) runs inside a request handler — it stalls the event loop and degrades throughput for all concurrent requests',
+    fix: 'Replace with the async variant (crypto.pbkdf2, fs.promises.readFile) and await the result'
+  },
+  'excessive-allocation': {
+    description: 'A new object or collection is allocated on every iteration of a loop — causes GC pressure and O(n) heap growth',
+    fix: 'Hoist the allocation before the loop and reuse/clear it on each iteration, or use an object pool'
+  },
+  'missing-stream': {
+    description: 'An entire file or response body is read into memory at once (readFile, Buffer.concat) instead of being streamed — risks OOM on large inputs',
+    fix: 'Use createReadStream/pipeline or process data in chunks instead of buffering the whole content'
+  },
+
+  // Architecture — v3.14.0 passes
+  'god-class': {
+    description: 'A class has excessively high WMC, low cohesion (LCOM), and/or high coupling (CBO) — it does too much and is hard to test, understand, and maintain',
+    fix: 'Extract cohesive subsets of methods and fields into smaller focused classes using the Single Responsibility Principle'
+  },
+
+  // Maintainability — v3.14.0 passes
+  'naming-convention': {
+    description: 'A class, method, or variable name violates the language\'s standard naming convention (e.g., camelCase for JS methods, PascalCase for Java classes)',
+    fix: 'Rename to follow the language\'s established convention — consistency aids readability and tool integration'
+  },
 };
 
 const SEVERITY_COLORS: Record<string, (text: string) => string> = {
@@ -264,33 +342,6 @@ const SEVERITY_ICONS: Record<string, string> = {
   medium: '!',
   low: 'i',
 };
-
-const SINK_SEVERITY: Record<SinkType, string> = {
-  sql_injection: 'critical',
-  nosql_injection: 'high',
-  command_injection: 'critical',
-  path_traversal: 'high',
-  xss: 'high',
-  xxe: 'critical',
-  deserialization: 'critical',
-  ldap_injection: 'high',
-  xpath_injection: 'high',
-  ssrf: 'high',
-  open_redirect: 'medium',
-  code_injection: 'critical',
-  log_injection: 'medium',
-  weak_random: 'low',
-  weak_hash: 'low',
-  weak_crypto: 'low',
-  insecure_cookie: 'low',
-  trust_boundary: 'medium',
-  external_taint_escape: 'medium',
-};
-
-interface CrossFileData {
-  taintPaths: TaintPath[];
-  crossFileCalls: CrossFileCall[];
-}
 
 function formatCrossFilePaths(taintPaths: TaintPath[]): string {
   if (taintPaths.length === 0) return '';
@@ -382,7 +433,7 @@ export function formatResults(results: ScanResult[], verbose?: boolean, crossFil
 
 export function formatJSON(results: ScanResult[], crossFileData?: CrossFileData): string {
   const output = {
-    version: '1.0.0',
+    version,
     timestamp: new Date().toISOString(),
     results: results.map(r => ({
       file: r.file,
@@ -412,7 +463,7 @@ export function formatSARIF(results: ScanResult[], crossFileData?: CrossFileData
         tool: {
           driver: {
             name: 'cognium',
-            version: '1.0.0',
+            version,
             informationUri: 'https://cognium.dev',
             rules: generateRules(results, crossFileData),
           },

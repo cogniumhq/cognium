@@ -57,16 +57,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 export function showHelp(): void {
   console.log(`
-cognium - AI-powered static analysis CLI for detecting security vulnerabilities
+cognium - Semantic static analysis CLI for detecting security vulnerabilities
 
 USAGE:
   cognium <command> [options]
 
 COMMANDS:
-  scan <path>     Scan files or directories for security vulnerabilities
-  metrics <path>  Report software quality metrics for files or directories
-  init            Initialize a configuration file in your project
-  version         Display version information
+  scan <path>          Scan files or directories for security vulnerabilities
+  metrics <path>       Report software quality metrics for files or directories
+  list-passes [cat]    List all analysis passes (optionally filter by category)
+  init                 Initialize a configuration file in your project
+  version              Display version information
 
 SCAN OPTIONS:
   -l, --language <lang>      Scan only files for language (bash|java|javascript|typescript|python|rust)
@@ -79,9 +80,8 @@ SCAN OPTIONS:
   --category <cats>          Filter by finding category (comma-separated):
                                - Valid categories: security, reliability, performance,
                                  maintainability, architecture
-                               - Example: "security" shows only security vulnerabilities
-                               - Example: "reliability,performance" shows both categories
   --exclude-cwe <cwes>       Exclude specific CWEs (comma-separated, e.g., "CWE-330,CWE-327")
+  --disable-pass <passes>    Disable specific passes (comma-separated, e.g., "naming-convention,todo-in-prod")
   --exclude-tests            Exclude test files and directories
   --profile <file>           Load config from file [default: cognium.config.json]
   -o, --output <file>        Write results to file
@@ -94,9 +94,8 @@ METRICS OPTIONS:
   --category <cats>          Filter by metric category (comma-separated):
                                - Valid categories: complexity, size, coupling,
                                  inheritance, cohesion, documentation, duplication
-                               - Example: "complexity" shows only complexity metrics
-                               - Example: "complexity,size" shows both categories
   --exclude-tests            Exclude test files and directories
+  --profile <file>           Load config from file [default: cognium.config.json]
   -o, --output <file>        Write results to file
   -q, --quiet                Suppress progress output
 
@@ -108,12 +107,13 @@ EXAMPLES:
   cognium scan . --category security
   cognium scan . --category reliability,performance
   cognium scan . --exclude-cwe CWE-330,CWE-327
-  cognium scan . --severity high --exclude-cwe CWE-601
+  cognium scan . --disable-pass naming-convention,todo-in-prod
   cognium scan . --profile custom-config.json
   cognium metrics src/
   cognium metrics src/ --category complexity
-  cognium metrics src/ --category complexity,size --format json
-  cognium metrics src/ --language typescript -o metrics.json -f json
+  cognium metrics src/ --format json --profile custom-config.json
+  cognium list-passes
+  cognium list-passes reliability
   cognium init
 
 For more information, visit: https://cognium.dev

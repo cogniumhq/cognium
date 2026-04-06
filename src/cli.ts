@@ -3,20 +3,23 @@
  * cognium CLI - AI-powered static analysis for security vulnerabilities
  */
 
-import { readFileSync, existsSync, writeFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { stat, readdir } from 'fs/promises';
-import { join, extname, resolve, relative, dirname } from 'path';
+import { join, extname, resolve, relative } from 'path';
 import {
   initAnalyzer, analyze, analyzeProject,
   type SinkType, type SastFinding, type SupportedLanguage,
-  type TaintPath, type CrossFileCall,
   type MetricValue, type FileMetrics,
   type PassOptions,
 } from 'circle-ir';
-import { formatResults, formatJSON, formatSARIF } from './formatters.js';
+import {
+  formatResults, formatJSON, formatSARIF,
+  SINK_SEVERITY, SINK_CWE,
+  type ScanResult, type CrossFileData,
+} from './formatters.js';
 import { version } from './version.js';
 import { parseArgs, showHelp, showVersion } from './utils/args.js';
-import { spinner } from './utils/spinner.js';
+import { spinner, type Spinner } from './utils/spinner.js';
 import { colors } from './utils/colors.js';
 
 // =============================================================================
@@ -26,7 +29,7 @@ import { colors } from './utils/colors.js';
 /**
  * Suppression entry to exclude specific findings.
  */
-interface Suppression {
+export interface Suppression {
   /** Pass name to suppress (e.g., 'naming-convention', 'unbounded-collection') */
   pass: string;
   /** File path (relative or absolute) — if omitted, applies to all files */
@@ -40,7 +43,7 @@ interface Suppression {
 /**
  * cognium.config.json schema
  */
-interface CogniumConfig {
+export interface CogniumConfig {
   /** Config version for future compatibility */
   version?: string;
   /** Glob patterns to include */
@@ -67,7 +70,7 @@ interface CogniumConfig {
 /**
  * Load configuration from cognium.config.json or a custom profile path.
  */
-function loadConfig(profilePath?: string): CogniumConfig | null {
+export function loadConfig(profilePath?: string): CogniumConfig | null {
   const configPath = profilePath || 'cognium.config.json';
 
   if (!existsSync(configPath)) {
@@ -86,7 +89,7 @@ function loadConfig(profilePath?: string): CogniumConfig | null {
 /**
  * Convert config passes to circle-ir PassOptions and disabledPasses.
  */
-function convertConfigToPassOptions(config: CogniumConfig): {
+export function convertConfigToPassOptions(config: CogniumConfig): {
   passOptions: PassOptions;
   disabledPasses: string[];
 } {
@@ -143,7 +146,7 @@ function convertConfigToPassOptions(config: CogniumConfig): {
 /**
  * Apply suppressions to filter out findings.
  */
-function applySuppressionsToResults(
+export function applySuppressionsToResults(
   results: ScanResult[],
   suppressions: Suppression[],
   basePath: string,
@@ -196,7 +199,7 @@ const TEST_PATTERNS = [
   /_test\.rs$/,
 ];
 
-function isTestFile(filePath: string): boolean {
+export function isTestFile(filePath: string): boolean {
   return TEST_PATTERNS.some(pattern => pattern.test(filePath));
 }
 
@@ -226,6 +229,8 @@ interface ScanOptions {
   excludeCwe?: string;
   /** Path to config file (default: cognium.config.json) */
   profile?: string;
+  /** Comma-separated list of pass names to disable */
+  disablePass?: string;
 }
 
 interface MetricsOptions {
@@ -235,74 +240,13 @@ interface MetricsOptions {
   quiet?: boolean;
   language?: string;
   excludeTests?: boolean;
+  /** Path to config file (default: cognium.config.json) */
+  profile?: string;
 }
 
-interface ScanResult {
-  file: string;
-  vulnerabilities: Array<{
-    type: string;
-    severity: string;
-    message: string;
-    line: number;
-    cwe?: string;
-    /** Instance-specific fix suggestion forwarded from SastFinding.fix */
-    fix?: string;
-    /** ISO 25010 category: security | reliability | performance | maintainability | architecture */
-    category: string;
-  }>;
-  error?: string;
-}
+// ScanResult, CrossFileData, SINK_SEVERITY, SINK_CWE imported from formatters.ts
 
-interface CrossFileData {
-  taintPaths: TaintPath[];
-  crossFileCalls: CrossFileCall[];
-}
-
-const SINK_SEVERITY: Record<SinkType, string> = {
-  sql_injection: 'critical',
-  nosql_injection: 'high',
-  command_injection: 'critical',
-  path_traversal: 'high',
-  xss: 'high',
-  xxe: 'critical',
-  deserialization: 'critical',
-  ldap_injection: 'high',
-  xpath_injection: 'high',
-  ssrf: 'high',
-  open_redirect: 'medium',
-  code_injection: 'critical',
-  log_injection: 'medium',
-  weak_random: 'low',
-  weak_hash: 'low',
-  weak_crypto: 'low',
-  insecure_cookie: 'low',
-  trust_boundary: 'medium',
-  external_taint_escape: 'medium',
-};
-
-const SINK_CWE: Record<SinkType, string> = {
-  sql_injection: 'CWE-89',
-  nosql_injection: 'CWE-943',
-  command_injection: 'CWE-78',
-  path_traversal: 'CWE-22',
-  xss: 'CWE-79',
-  xxe: 'CWE-611',
-  deserialization: 'CWE-502',
-  ldap_injection: 'CWE-90',
-  xpath_injection: 'CWE-643',
-  ssrf: 'CWE-918',
-  open_redirect: 'CWE-601',
-  code_injection: 'CWE-94',
-  log_injection: 'CWE-117',
-  weak_random: 'CWE-330',
-  weak_hash: 'CWE-327',
-  weak_crypto: 'CWE-327',
-  insecure_cookie: 'CWE-614',
-  trust_boundary: 'CWE-501',
-  external_taint_escape: 'CWE-20',
-};
-
-function detectLanguage(filePath: string): string | null {
+export function detectLanguage(filePath: string): string | null {
   const ext = extname(filePath).toLowerCase();
   return LANG_MAP[ext] || null;
 }
@@ -322,7 +266,7 @@ function fileMatchesLanguage(filePath: string, language?: string): boolean {
  * Simple glob pattern matching for include/exclude patterns.
  * Supports: ** (any path), * (any segment), ? (any single char)
  */
-function matchesGlob(filePath: string, pattern: string): boolean {
+export function matchesGlob(filePath: string, pattern: string): boolean {
   // Normalize separators
   const normalizedPath = filePath.replace(/\\/g, '/');
   const normalizedPattern = pattern.replace(/\\/g, '/');
@@ -332,15 +276,15 @@ function matchesGlob(filePath: string, pattern: string): boolean {
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // Escape special regex chars (except * and ?)
     .replace(/\*\*/g, '{{GLOBSTAR}}')       // Temporarily replace **
     .replace(/\*/g, '[^/]*')                // * matches anything except /
-    .replace(/\?/g, '.')                    // ? matches any single char
-    .replace(/\{\{GLOBSTAR\}\}/g, '.*');    // ** matches anything including /
+    .replace(/\?/g, '.');                   // ? matches any single char
 
-  // Match from start for patterns starting with **, otherwise require path boundary
-  if (!normalizedPattern.startsWith('**/')) {
-    regex = '^' + regex;
-  }
+  // Handle ** (globstar) — matches zero or more path segments
+  regex = regex
+    .replace(/\{\{GLOBSTAR\}\}\//g, '(?:.+/)?')   // **/ at start or mid → zero or more dirs
+    .replace(/\/\{\{GLOBSTAR\}\}/g, '(?:/.*)?')    // /** at end → optional trailing path
+    .replace(/\{\{GLOBSTAR\}\}/g, '.*');            // bare ** fallback
 
-  return new RegExp(regex + '$').test(normalizedPath);
+  return new RegExp('^' + regex + '$').test(normalizedPath);
 }
 
 /**
@@ -414,7 +358,7 @@ interface AnalyzeOptions {
 async function scanFile(filePath: string, language: string, analyzeOpts?: AnalyzeOptions): Promise<ScanResult> {
   try {
     const code = readFileSync(filePath, 'utf-8');
-    const result = await analyze(code, filePath, language as any, {
+    const result = await analyze(code, filePath, language as SupportedLanguage, {
       passOptions: analyzeOpts?.passOptions,
       disabledPasses: analyzeOpts?.disabledPasses,
     });
@@ -500,6 +444,85 @@ async function scanProject(
   };
 }
 
+// ─── Shared WASM initialization ──────────────────────────────────────────────
+
+async function initWasm(spin: Spinner | null): Promise<void> {
+  const isStandalone = import.meta.url.includes('/$bunfs/');
+
+  if (isStandalone) {
+    const { dirname, join } = await import('path');
+    const binaryDir = dirname(process.execPath);
+    const cwd = process.cwd();
+
+    let scriptDir: string | null = null;
+    if (!import.meta.url.includes('/$bunfs/')) {
+      try {
+        const { fileURLToPath } = await import('url');
+        scriptDir = dirname(fileURLToPath(import.meta.url));
+      } catch { /* not a file:// URL */ }
+    }
+
+    const wasmLocations = [
+      join(binaryDir, 'wasm'),
+      join(cwd, 'wasm'),
+      join(binaryDir, '..', 'wasm'),
+      ...(scriptDir ? [
+        join(scriptDir, 'wasm'),
+        join(scriptDir, '..', 'wasm'),
+        join(scriptDir, '..', 'node_modules', 'circle-ir', 'dist', 'wasm'),
+      ] : []),
+    ];
+
+    let wasmDir: string | null = null;
+    for (const location of wasmLocations) {
+      if (existsSync(location) && existsSync(join(location, 'web-tree-sitter.wasm'))) {
+        wasmDir = location;
+        break;
+      }
+    }
+
+    if (wasmDir) {
+      await initAnalyzer({
+        wasmPath: join(wasmDir, 'web-tree-sitter.wasm'),
+        languagePaths: {
+          bash: join(wasmDir, 'tree-sitter-bash.wasm'),
+          java: join(wasmDir, 'tree-sitter-java.wasm'),
+          javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
+          typescript: join(wasmDir, 'tree-sitter-javascript.wasm'),
+          python: join(wasmDir, 'tree-sitter-python.wasm'),
+          rust: join(wasmDir, 'tree-sitter-rust.wasm'),
+        }
+      });
+    } else {
+      if (spin) spin.fail('WASM files not found');
+      console.error(colors.red('\nError: WASM files not found'));
+      console.error('The cognium binary requires WASM files to be present in a "wasm/" directory.');
+      console.error('\nExpected locations (searched in order):');
+      for (const loc of wasmLocations) {
+        console.error(`  - ${loc}`);
+      }
+      console.error('\nPlease ensure the wasm/ directory is located next to the binary or in your current directory.');
+      console.error('Download from: https://github.com/cogniumhq/cognium/releases');
+      process.exit(2);
+    }
+  } else {
+    const wasmBasePath = new URL('../node_modules/circle-ir/dist/wasm/', import.meta.url).pathname;
+    await initAnalyzer({
+      wasmPath: wasmBasePath + 'web-tree-sitter.wasm',
+      languagePaths: {
+        bash: wasmBasePath + 'tree-sitter-bash.wasm',
+        java: wasmBasePath + 'tree-sitter-java.wasm',
+        javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
+        typescript: wasmBasePath + 'tree-sitter-javascript.wasm',
+        python: wasmBasePath + 'tree-sitter-python.wasm',
+        rust: wasmBasePath + 'tree-sitter-rust.wasm',
+      }
+    });
+  }
+}
+
+// ─── Scan command ────────────────────────────────────────────────────────────
+
 async function runScan(targetPath: string, options: ScanOptions): Promise<void> {
   const spin = options.quiet ? null : spinner('Initializing analyzer...').start();
 
@@ -520,88 +543,26 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
     }
   }
 
-  try {
-    // Initialize circle-ir with appropriate WASM paths
-    // Detect if we're running as a standalone binary (compiled with bun --compile)
-    const isStandalone = import.meta.url.includes('/$bunfs/');
-
-    if (isStandalone) {
-      // Standalone binary or script bundle: look for wasm/ directory in multiple locations
-      const { dirname, join } = await import('path');
-      const binaryDir = dirname(process.execPath);
-      const cwd = process.cwd();
-
-      // For script bundles (dist/cli.js), import.meta.url is an absolute file:// URL
-      // so we can resolve WASM relative to the script — this works from any working directory.
-      let scriptDir: string | null = null;
-      if (!import.meta.url.includes('/$bunfs/')) {
-        try {
-          const { fileURLToPath } = await import('url');
-          scriptDir = dirname(fileURLToPath(import.meta.url));
-        } catch { /* not a file:// URL */ }
+  // Merge CLI --disable-pass with config-based disabled passes
+  if (options.disablePass) {
+    const cliDisabled = options.disablePass.split(',').map(p => p.trim()).filter(Boolean);
+    for (const p of cliDisabled) {
+      if (!disabledPasses.includes(p)) {
+        disabledPasses.push(p);
       }
-
-      // Try multiple locations for wasm directory
-      const wasmLocations = [
-        join(binaryDir, 'wasm'),           // Next to compiled binary
-        join(cwd, 'wasm'),                 // Current working directory
-        join(binaryDir, '..', 'wasm'),     // Parent of binary directory
-        // Script-relative paths (work from any directory when running dist/cli.js)
-        ...(scriptDir ? [
-          join(scriptDir, 'wasm'),                                         // dist/wasm/
-          join(scriptDir, '..', 'wasm'),                                   // project root wasm/
-          join(scriptDir, '..', 'node_modules', 'circle-ir', 'dist', 'wasm'), // node_modules
-        ] : []),
-      ];
-
-      let wasmDir: string | null = null;
-      for (const location of wasmLocations) {
-        if (existsSync(location) && existsSync(join(location, 'web-tree-sitter.wasm'))) {
-          wasmDir = location;
-          break;
-        }
-      }
-
-      if (wasmDir) {
-        await initAnalyzer({
-          wasmPath: join(wasmDir, 'web-tree-sitter.wasm'),
-          languagePaths: {
-            bash: join(wasmDir, 'tree-sitter-bash.wasm'),
-            java: join(wasmDir, 'tree-sitter-java.wasm'),
-            javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
-            typescript: join(wasmDir, 'tree-sitter-javascript.wasm'),
-            python: join(wasmDir, 'tree-sitter-python.wasm'),
-            rust: join(wasmDir, 'tree-sitter-rust.wasm'),
-          }
-        });
-      } else {
-        // WASM files not found
-        if (spin) spin.fail('WASM files not found');
-        console.error(colors.red('\nError: WASM files not found'));
-        console.error('The cognium binary requires WASM files to be present in a "wasm/" directory.');
-        console.error('\nExpected locations (searched in order):');
-        for (const loc of wasmLocations) {
-          console.error(`  - ${loc}`);
-        }
-        console.error('\nPlease ensure the wasm/ directory is located next to the binary or in your current directory.');
-        console.error('Download from: https://github.com/cogniumhq/cognium/releases');
-        process.exit(2);
-      }
-    } else {
-      // Development mode: use node_modules
-      const wasmBasePath = new URL('../node_modules/circle-ir/dist/wasm/', import.meta.url).pathname;
-      await initAnalyzer({
-        wasmPath: wasmBasePath + 'web-tree-sitter.wasm',
-        languagePaths: {
-          bash: wasmBasePath + 'tree-sitter-bash.wasm',
-          java: wasmBasePath + 'tree-sitter-java.wasm',
-          javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
-          typescript: wasmBasePath + 'tree-sitter-javascript.wasm',
-          python: wasmBasePath + 'tree-sitter-python.wasm',
-          rust: wasmBasePath + 'tree-sitter-rust.wasm',
-        }
-      });
     }
+  }
+
+  // Apply config-level severity/category defaults (CLI flags override)
+  if (!options.severity && config?.severity) {
+    options.severity = config.severity;
+  }
+  if (!options.category && config?.categories?.length) {
+    options.category = config.categories.join(',');
+  }
+
+  try {
+    await initWasm(spin);
 
     if (spin) spin.text = 'Collecting files...';
 
@@ -845,76 +806,23 @@ function fmtMetricValue(value: number, unit?: string): string {
 async function runMetrics(targetPath: string, options: MetricsOptions): Promise<void> {
   const spin = options.quiet ? null : spinner('Initializing analyzer...').start();
 
-  // Load config for include/exclude patterns
-  const config = loadConfig();
+  // Load config for include/exclude patterns and pass options
+  const config = loadConfig(options.profile);
+  let passOptions: PassOptions = {};
+  let disabledPasses: string[] = [];
+
+  if (config) {
+    const converted = convertConfigToPassOptions(config);
+    passOptions = converted.passOptions;
+    disabledPasses = converted.disabledPasses;
+
+    if (!options.quiet) {
+      console.log(colors.dim(`Loaded config: ${options.profile || 'cognium.config.json'}`));
+    }
+  }
 
   try {
-    // Initialize WASM (same as runScan)
-    const isStandalone = import.meta.url.includes('/$bunfs/');
-
-    if (isStandalone) {
-      const { dirname, join } = await import('path');
-      const binaryDir = dirname(process.execPath);
-      const cwd = process.cwd();
-
-      let scriptDir: string | null = null;
-      if (!import.meta.url.includes('/$bunfs/')) {
-        try {
-          const { fileURLToPath } = await import('url');
-          scriptDir = dirname(fileURLToPath(import.meta.url));
-        } catch { /* not a file:// URL */ }
-      }
-
-      const wasmLocations = [
-        join(binaryDir, 'wasm'),
-        join(cwd, 'wasm'),
-        join(binaryDir, '..', 'wasm'),
-        ...(scriptDir ? [
-          join(scriptDir, 'wasm'),
-          join(scriptDir, '..', 'wasm'),
-          join(scriptDir, '..', 'node_modules', 'circle-ir', 'dist', 'wasm'),
-        ] : []),
-      ];
-
-      let wasmDir: string | null = null;
-      for (const location of wasmLocations) {
-        if (existsSync(location) && existsSync(join(location, 'web-tree-sitter.wasm'))) {
-          wasmDir = location;
-          break;
-        }
-      }
-
-      if (wasmDir) {
-        await initAnalyzer({
-          wasmPath: join(wasmDir, 'web-tree-sitter.wasm'),
-          languagePaths: {
-            bash: join(wasmDir, 'tree-sitter-bash.wasm'),
-            java: join(wasmDir, 'tree-sitter-java.wasm'),
-            javascript: join(wasmDir, 'tree-sitter-javascript.wasm'),
-            typescript: join(wasmDir, 'tree-sitter-javascript.wasm'),
-            python: join(wasmDir, 'tree-sitter-python.wasm'),
-            rust: join(wasmDir, 'tree-sitter-rust.wasm'),
-          }
-        });
-      } else {
-        if (spin) spin.fail('WASM files not found');
-        console.error(colors.red('\nError: WASM files not found'));
-        process.exit(2);
-      }
-    } else {
-      const wasmBasePath = new URL('../node_modules/circle-ir/dist/wasm/', import.meta.url).pathname;
-      await initAnalyzer({
-        wasmPath: wasmBasePath + 'web-tree-sitter.wasm',
-        languagePaths: {
-          bash: wasmBasePath + 'tree-sitter-bash.wasm',
-          java: wasmBasePath + 'tree-sitter-java.wasm',
-          javascript: wasmBasePath + 'tree-sitter-javascript.wasm',
-          typescript: wasmBasePath + 'tree-sitter-javascript.wasm',
-          python: wasmBasePath + 'tree-sitter-python.wasm',
-          rust: wasmBasePath + 'tree-sitter-rust.wasm',
-        }
-      });
-    }
+    await initWasm(spin);
 
     if (spin) spin.text = 'Collecting files...';
 
@@ -955,7 +863,10 @@ async function runMetrics(targetPath: string, options: MetricsOptions): Promise<
 
       try {
         const code = readFileSync(file, 'utf-8');
-        const result = await analyze(code, file, lang as any);
+        const result = await analyze(code, file, lang as SupportedLanguage, {
+          passOptions,
+          disabledPasses,
+        });
         if (result.metrics) {
           fileMetricsList.push(result.metrics);
         }
@@ -1048,6 +959,101 @@ async function runMetrics(targetPath: string, options: MetricsOptions): Promise<
   }
 }
 
+// ─── Pass registry for introspection ─────────────────────────────────────────
+
+interface PassInfo {
+  rule_id: string;
+  category: string;
+  cwe?: string;
+  severity: string;
+  description: string;
+}
+
+export const PASS_REGISTRY: PassInfo[] = [
+  // Security (core taint passes)
+  { rule_id: 'taint-matcher', category: 'security', severity: '-', description: 'Config-based taint source/sink extraction' },
+  { rule_id: 'constant-propagation', category: 'security', severity: '-', description: 'Constant propagation and dead-code detection' },
+  { rule_id: 'language-sources', category: 'security', severity: '-', description: 'Language-specific taint sources and sinks' },
+  { rule_id: 'sink-filter', category: 'security', severity: '-', description: 'Four-stage false-positive elimination' },
+  { rule_id: 'taint-propagation', category: 'security', severity: '-', description: 'DFG-based taint flow verification' },
+  { rule_id: 'interprocedural', category: 'security', severity: '-', description: 'Cross-method taint propagation' },
+  // Reliability
+  { rule_id: 'dead-code', category: 'reliability', cwe: 'CWE-561', severity: 'low', description: 'CFG block unreachable from entry' },
+  { rule_id: 'missing-await', category: 'reliability', cwe: 'CWE-252', severity: 'medium', description: 'Async call without await, Promise discarded' },
+  { rule_id: 'null-deref', category: 'reliability', cwe: 'CWE-476', severity: 'high', description: 'Nullable source dereferenced without null guard' },
+  { rule_id: 'resource-leak', category: 'reliability', cwe: 'CWE-772', severity: 'high', description: 'Resource opened, not closed on exception path' },
+  { rule_id: 'unchecked-return', category: 'reliability', cwe: 'CWE-252', severity: 'medium', description: 'Return value ignored; majority of callers check it' },
+  { rule_id: 'infinite-loop', category: 'reliability', cwe: 'CWE-835', severity: 'high', description: 'CFG cycle with no exit edge' },
+  { rule_id: 'double-close', category: 'reliability', cwe: 'CWE-675', severity: 'medium', description: 'Resource close() reachable on 2+ paths' },
+  { rule_id: 'use-after-close', category: 'reliability', cwe: 'CWE-672', severity: 'high', description: 'Read of variable after resource was released' },
+  { rule_id: 'unhandled-exception', category: 'reliability', cwe: 'CWE-390', severity: 'medium', description: 'Throw/raise not covered by any try/catch' },
+  { rule_id: 'broad-catch', category: 'reliability', cwe: 'CWE-396', severity: 'low', description: 'catch(Exception) or bare except' },
+  { rule_id: 'swallowed-exception', category: 'reliability', cwe: 'CWE-390', severity: 'medium', description: 'Catch block: no re-throw, no log, no error return' },
+  { rule_id: 'missing-guard-dom', category: 'reliability', cwe: 'CWE-285', severity: 'high', description: 'Auth check doesn\'t dominate sensitive operation' },
+  { rule_id: 'cleanup-verify', category: 'reliability', cwe: 'CWE-772', severity: 'medium', description: 'Resource cleanup doesn\'t post-dominate acquisition' },
+  // Performance
+  { rule_id: 'n-plus-one', category: 'performance', cwe: 'CWE-1049', severity: 'medium', description: 'DB/API call inside loop body' },
+  { rule_id: 'sync-io-async', category: 'performance', cwe: 'CWE-1050', severity: 'medium', description: 'Blocking I/O inside async function' },
+  { rule_id: 'string-concat-loop', category: 'performance', cwe: 'CWE-1046', severity: 'low', description: 'String += inside loop (O(n^2) allocations)' },
+  { rule_id: 'redundant-loop-computation', category: 'performance', cwe: 'CWE-1050', severity: 'low', description: 'Loop-invariant .length/.size()/Math.* recomputed' },
+  { rule_id: 'unbounded-collection', category: 'performance', cwe: 'CWE-770', severity: 'medium', description: 'Collection grows in loop with no size check' },
+  { rule_id: 'serial-await', category: 'performance', severity: 'low', description: 'Sequential awaits with no data dependency' },
+  { rule_id: 'react-inline-jsx', category: 'performance', severity: 'low', description: 'Inline object/function in JSX props' },
+  { rule_id: 'blocking-main-thread', category: 'performance', cwe: 'CWE-1050', severity: 'medium', description: 'Blocking crypto/Sync calls in request handlers' },
+  { rule_id: 'excessive-allocation', category: 'performance', cwe: 'CWE-770', severity: 'low', description: 'Object/collection allocation inside loop body' },
+  { rule_id: 'missing-stream', category: 'performance', severity: 'low', description: 'Whole-file read without streaming' },
+  // Maintainability
+  { rule_id: 'missing-public-doc', category: 'maintainability', severity: 'low', description: 'Exported function/type with no doc block' },
+  { rule_id: 'todo-in-prod', category: 'maintainability', severity: 'low', description: 'TODO/FIXME/HACK in non-test file' },
+  { rule_id: 'stale-doc-ref', category: 'maintainability', severity: 'low', description: 'Doc comment references symbol not in scope' },
+  { rule_id: 'variable-shadowing', category: 'maintainability', cwe: 'CWE-1109', severity: 'medium', description: 'Inner scope re-declares outer name' },
+  { rule_id: 'leaked-global', category: 'maintainability', cwe: 'CWE-1109', severity: 'medium', description: 'Assignment without declaration (JS accidental global)' },
+  { rule_id: 'unused-variable', category: 'maintainability', cwe: 'CWE-561', severity: 'low', description: 'Declared variable, no reads on any reachable path' },
+  { rule_id: 'naming-convention', category: 'maintainability', severity: 'low', description: 'Name violates language naming convention' },
+  // Architecture
+  { rule_id: 'dependency-fan-out', category: 'architecture', severity: 'low', description: 'Module imports 20+ other modules' },
+  { rule_id: 'circular-dependency', category: 'architecture', cwe: 'CWE-1047', severity: 'medium', description: 'Cycle in module import graph' },
+  { rule_id: 'orphan-module', category: 'architecture', severity: 'low', description: 'File with no incoming imports, not an entry point' },
+  { rule_id: 'deep-inheritance', category: 'architecture', cwe: 'CWE-1086', severity: 'low', description: 'Inheritance depth > 5 levels' },
+  { rule_id: 'missing-override', category: 'architecture', severity: 'low', description: 'Method matches supertype signature, lacks @Override' },
+  { rule_id: 'unused-interface-method', category: 'architecture', severity: 'low', description: 'Interface method never called through that interface' },
+  { rule_id: 'god-class', category: 'architecture', cwe: 'CWE-1060', severity: 'medium', description: 'Class with high WMC/low LCOM/high CBO' },
+];
+
+function handleListPasses(filterCategory?: string): void {
+  const categories = ['security', 'reliability', 'performance', 'maintainability', 'architecture'];
+  const filtered = filterCategory
+    ? PASS_REGISTRY.filter(p => p.category === filterCategory.toLowerCase())
+    : PASS_REGISTRY;
+
+  if (filtered.length === 0) {
+    console.log(colors.yellow(`No passes found for category: ${filterCategory}`));
+    console.log(`Valid categories: ${categories.join(', ')}`);
+    return;
+  }
+
+  // Group by category
+  const byCategory = new Map<string, PassInfo[]>();
+  for (const pass of filtered) {
+    const list = byCategory.get(pass.category) ?? [];
+    list.push(pass);
+    byCategory.set(pass.category, list);
+  }
+
+  for (const cat of categories) {
+    const passes = byCategory.get(cat);
+    if (!passes) continue;
+    console.log(colors.bold(`\n${cat.toUpperCase()} (${passes.length} passes)`));
+    for (const p of passes) {
+      const cwe = p.cwe ? colors.dim(` [${p.cwe}]`) : '';
+      const sev = p.severity !== '-' ? ` (${p.severity})` : '';
+      console.log(`  ${p.rule_id.padEnd(28)}${sev}${cwe}`);
+      console.log(colors.dim(`    ${p.description}`));
+    }
+  }
+  console.log(`\nTotal: ${filtered.length} passes`);
+}
+
 // Init command handler
 async function handleInit(): Promise<void> {
   const configPath = 'cognium.config.json';
@@ -1056,18 +1062,19 @@ async function handleInit(): Promise<void> {
     return;
   }
 
-  const config = {
-    include: ['src/**/*.java', 'src/**/*.ts', 'src/**/*.py'],
-    exclude: ['**/test/**', '**/node_modules/**', '**/dist/**'],
-    severity: 'medium',
-    rules: {
-      'sql-injection': 'error',
-      'command-injection': 'error',
-      'xss': 'error',
-      'path-traversal': 'error',
-      'ssrf': 'warn',
-      'deserialization': 'warn',
+  const config: CogniumConfig = {
+    version: '1.0',
+    include: ['src/**/*.java', 'src/**/*.ts', 'src/**/*.js', 'src/**/*.py'],
+    exclude: ['**/test/**', '**/tests/**', '**/node_modules/**', '**/dist/**'],
+    passes: {
+      'naming-convention': false,
+      'missing-public-doc': false,
+      'todo-in-prod': false,
+      'dependency-fan-out': { threshold: 20 },
     },
+    suppressions: [],
+    severity: 'low',
+    categories: ['security', 'reliability', 'performance', 'maintainability', 'architecture'],
   };
 
   const { writeFileSync } = await import('fs');
@@ -1097,6 +1104,12 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Handle list-passes command
+  if (command === 'list-passes') {
+    handleListPasses(args[0]);
+    return;
+  }
+
   // Handle metrics command
   if (command === 'metrics') {
     if (args.length === 0) {
@@ -1113,6 +1126,7 @@ async function main(): Promise<void> {
       quiet: options.quiet === true || options.q === true,
       language: (options.language || options.l) ? normalizeLanguage((options.language || options.l) as string) : undefined,
       excludeTests: options['exclude-tests'] === true,
+      profile: (options.profile || options.p) as string | undefined,
     };
 
     await runMetrics(targetPath, metricsOptions);
@@ -1140,6 +1154,7 @@ async function main(): Promise<void> {
       excludeTests: options['exclude-tests'] === true,
       excludeCwe: (options['exclude-cwe']) as string | undefined,
       profile: (options.profile || options.p) as string | undefined,
+      disablePass: (options['disable-pass']) as string | undefined,
     };
 
     await runScan(targetPath, scanOptions);
