@@ -54,7 +54,9 @@ jobs:
           node-version: '22.x'
 
       - name: Install cognium-ai
-        run: npm install -g cognium-ai@latest
+        run: |
+          npm install cognium-ai@latest
+          ln -s node_modules/circle-ir/dist/wasm wasm
 
       - name: Run security scan
         env:
@@ -63,7 +65,7 @@ jobs:
           LLM_ENRICHMENT_MODEL: openai/gpt-4o-mini
         run: |
           # Exit code 0 = clean, 1 = security findings (fail CI), 2 = quality-only findings (ok)
-          cognium-ai scan ./src || [ $? -eq 2 ]
+          npx cognium-ai scan ./src || [ $? -eq 2 ]
 
       - name: Run trust score
         env:
@@ -71,8 +73,8 @@ jobs:
           LLM_API_KEY: ${{ github.token }}
           LLM_ENRICHMENT_MODEL: openai/gpt-4o-mini
         run: |
-          cognium-ai trust ./src
-          cognium-ai trust ./src --format badge -o trust-badge.svg
+          npx cognium-ai trust ./src
+          npx cognium-ai trust ./src --format badge -o trust-badge.svg
 
       - name: Run quality score
         env:
@@ -80,8 +82,8 @@ jobs:
           LLM_API_KEY: ${{ github.token }}
           LLM_ENRICHMENT_MODEL: openai/gpt-4o-mini
         run: |
-          cognium-ai quality ./src
-          cognium-ai quality ./src --format badge -o quality-badge.svg
+          npx cognium-ai quality ./src
+          npx cognium-ai quality ./src --format badge -o quality-badge.svg
 
       - name: Upload badges as artifacts
         uses: actions/upload-artifact@v4
