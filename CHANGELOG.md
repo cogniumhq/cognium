@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-04-05
+
+### Added
+
+- **125-test suite** — 94 unit tests (formatters, args parsing, config loading, scan/metrics
+  command logic) + 31 e2e tests (CLI subprocess via `Bun.spawn` covering text/json/sarif output,
+  exit codes, severity/category/CWE filtering, directory mode, metrics, config integration)
+- **`npm run dogfood`** — scans cognium's own `src/` directory with the project config; exits
+  non-zero on findings, suitable for CI gating
+
+### Changed
+
+- **circle-ir upgraded 3.16.4 -> 3.16.5** — false positive fixes in 4 analysis passes:
+  - `naming-convention`: skip synthetic names (`<module>`, `<anonymous>`)
+  - `redundant-loop-computation`: don't flag `.length` in JS/TS (O(1) property access)
+  - `unhandled-exception`: source-level try/catch detection fallback when CFG builder
+    misses exception edges
+  - `unbounded-collection`: skip bounded loops (`for...of`, `for...in`, `.forEach()`)
+- **Re-enabled 4 passes** in `cognium.config.json` that were previously disabled due to
+  false positives now fixed in circle-ir 3.16.5: `naming-convention`,
+  `redundant-loop-computation`, `unhandled-exception`, `unbounded-collection`
+- **Release script** now gracefully skips Homebrew formula update when `Formula/cognium.rb`
+  is not present
+
+[1.4.3]: https://github.com/cogniumhq/cognium/compare/v1.4.2...v1.4.3
+
 ## [1.4.0] - 2026-03-29
 
 ### Changed
