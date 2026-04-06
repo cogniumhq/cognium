@@ -111,6 +111,9 @@ SHA_LINUX_ARM64=$(awk '/cognium-linux-arm64/{print $1}' SHA256SUMS)
 success "SHA256SUMS generated"
 
 # ── Update local Formula/cognium.rb ─────────────────────────────────────────────
+if [[ ! -f Formula/cognium.rb ]]; then
+  warn "Formula/cognium.rb not found — skipping Homebrew formula update"
+else
 info "Updating Formula/cognium.rb..."
 python3 - <<PYEOF
 import re
@@ -140,6 +143,7 @@ with open('Formula/cognium.rb', 'w') as f:
     f.write(content)
 PYEOF
 success "Formula/cognium.rb updated"
+fi
 
 # ── Git commit, tag, push ────────────────────────────────────────────────────────
 info "Committing release $TAG..."
