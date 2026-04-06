@@ -97,13 +97,16 @@ jobs:
       - name: Commit badges to badges branch
         if: github.ref == 'refs/heads/main'
         run: |
+          # Save badges to temp before switching branches
+          cp trust-badge.svg /tmp/trust-badge.svg 2>/dev/null || true
+          cp quality-badge.svg /tmp/quality-badge.svg 2>/dev/null || true
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin badges:badges || git checkout --orphan badges
-          git checkout badges || git checkout --orphan badges
-          git reset --hard
-          cp ${{ github.workspace }}/trust-badge.svg . 2>/dev/null || true
-          cp ${{ github.workspace }}/quality-badge.svg . 2>/dev/null || true
+          git stash --include-untracked
+          git fetch origin badges && git checkout badges || git checkout --orphan badges
+          git rm -rf . 2>/dev/null || true
+          cp /tmp/trust-badge.svg . 2>/dev/null || true
+          cp /tmp/quality-badge.svg . 2>/dev/null || true
           git add trust-badge.svg quality-badge.svg
           git commit -m "Update badges [skip ci]" || echo "No changes to commit"
           git push origin badges --force
