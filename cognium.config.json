@@ -4,8 +4,6 @@
   "exclude": ["**/node_modules/**", "**/dist/**"],
 
   "passes": {
-    "missing-stream": false,
-    "orphan-module": false,
     "dependency-fan-out": { "threshold": 35 }
   },
 
