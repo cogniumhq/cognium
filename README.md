@@ -1,5 +1,8 @@
 # cognium
 
+![Trust Score](https://raw.githubusercontent.com/cogniumhq/circle-ir/badges/trust-badge.svg)
+![Quality Score](https://raw.githubusercontent.com/cogniumhq/circle-ir/badges/quality-badge.svg)
+
 Semantic static analysis engine for detecting security vulnerabilities via taint tracking.
 
 ## Installation
