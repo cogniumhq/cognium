@@ -1,5 +1,10 @@
 # cognium
 
+[![npm version](https://img.shields.io/npm/v/cognium.svg)](https://www.npmjs.com/package/cognium)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cogniumhq/cognium/blob/main/LICENSE)
+[![OWASP Benchmark](https://img.shields.io/badge/OWASP%20Benchmark-100%25%20TPR%2C%200%25%20FPR-brightgreen)](https://github.com/cogniumhq/cognium#benchmark-results)
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-available-blue?logo=github)](https://github.com/marketplace/actions/cognium-security-scan)
+
 Semantic static analysis engine for detecting security vulnerabilities via taint tracking.
 
 ## Installation
