@@ -1,0 +1,106 @@
+name: 'Cognium Security Scan'
+description: 'Semantic static analysis for security vulnerabilities via taint tracking. Supports Java, JavaScript, TypeScript, Python, Rust, and Bash.'
+author: 'Cognium Labs'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  path:
+    description: 'Path to scan (file or directory)'
+    required: false
+    default: './src'
+  severity:
+    description: 'Minimum severity level to report: low, medium, high, critical. Comma-separated for exact match (e.g. "critical,high").'
+    required: false
+    default: 'high'
+  format:
+    description: 'Output format: text, json, sarif'
+    required: false
+    default: 'sarif'
+  output:
+    description: 'Write results to this file path (e.g. results.sarif)'
+    required: false
+    default: 'cognium-results.sarif'
+  category:
+    description: 'Filter by category (comma-separated): security, reliability, performance, maintainability, architecture'
+    required: false
+    default: ''
+  exclude-cwe:
+    description: 'Comma-separated CWEs to suppress (e.g. CWE-327,CWE-330)'
+    required: false
+    default: ''
+  exclude-tests:
+    description: 'Exclude test files and directories'
+    required: false
+    default: 'false'
+  upload-sarif:
+    description: 'Upload SARIF results to GitHub Code Scanning (requires format: sarif and security-events: write permission on the workflow token)'
+    required: false
+    default: 'true'
+  version:
+    description: 'Cognium version to install (e.g. "1.4.2" or "latest")'
+    required: false
+    default: 'latest'
+
+outputs:
+  sarif-file:
+    description: 'Path to the generated SARIF file (when format is sarif)'
+    value: ${{ steps.scan.outputs.sarif-file }}
+  findings-count:
+    description: 'Number of security findings detected'
+    value: ${{ steps.scan.outputs.findings-count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Cognium
+      shell: bash
+      run: |
+        if [ "${{ inputs.version }}" = "latest" ]; then
+          npm install -g cognium
+        else
+          npm install -g cognium@${{ inputs.version }}
+        fi
+
+    - name: Run security scan
+      id: scan
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_SEVERITY: ${{ inputs.severity }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_CATEGORY: ${{ inputs.category }}
+        INPUT_EXCLUDE_CWE: ${{ inputs.exclude-cwe }}
+        INPUT_EXCLUDE_TESTS: ${{ inputs.exclude-tests }}
+      run: |
+        args=(--format "$INPUT_FORMAT" --severity "$INPUT_SEVERITY")
+        [ -n "$INPUT_OUTPUT" ] && args+=(--output "$INPUT_OUTPUT")
+        [ -n "$INPUT_CATEGORY" ] && args+=(--category "$INPUT_CATEGORY")
+        [ -n "$INPUT_EXCLUDE_CWE" ] && args+=(--exclude-cwe "$INPUT_EXCLUDE_CWE")
+        [ "$INPUT_EXCLUDE_TESTS" = "true" ] && args+=(--exclude-tests)
+
+        cognium scan "$INPUT_PATH" "${args[@]}" || EXIT_CODE=$?
+
+        if [ "$INPUT_FORMAT" = "sarif" ] && [ -n "$INPUT_OUTPUT" ]; then
+          echo "sarif-file=$INPUT_OUTPUT" >> "$GITHUB_OUTPUT"
+          COUNT=$(node -e "
+            const fs = require('fs');
+            try {
+              const d = JSON.parse(fs.readFileSync(process.env.INPUT_OUTPUT, 'utf8'));
+              console.log(d.runs.reduce((a, r) => a + (r.results || []).length, 0));
+            } catch (e) { console.log(0); }
+          " 2>/dev/null || echo "0")
+          echo "findings-count=$COUNT" >> "$GITHUB_OUTPUT"
+        fi
+
+        exit ${EXIT_CODE:-0}
+
+    - name: Upload SARIF to GitHub Code Scanning
+      if: always() && inputs.upload-sarif == 'true' && inputs.format == 'sarif' && inputs.output != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output }}
+        category: cognium
