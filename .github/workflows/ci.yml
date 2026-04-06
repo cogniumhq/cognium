@@ -53,9 +53,8 @@ jobs:
         with:
           node-version: '22.x'
 
-      - name: Install dependencies
+      - name: Install cognium-ai
         run: |
-          npm ci
           npm install cognium-ai@latest
           ln -s node_modules/circle-ir/dist/wasm wasm
 
