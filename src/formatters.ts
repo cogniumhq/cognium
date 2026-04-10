@@ -454,6 +454,67 @@ export function formatJSON(results: ScanResult[], crossFileData?: CrossFileData)
   return JSON.stringify(output, null, 2);
 }
 
+// OWASP Benchmark category mapping: Cognium type → { category name, CWE number }
+const OWASP_BENCHMARK_MAP: Record<string, { category: string; cwe: number }> = {
+  sql_injection:    { category: 'sqli',        cwe: 89  },
+  command_injection:{ category: 'cmdi',        cwe: 78  },
+  path_traversal:   { category: 'pathtraver',  cwe: 22  },
+  xss:              { category: 'xss',         cwe: 79  },
+  ldap_injection:   { category: 'ldapi',       cwe: 90  },
+  xpath_injection:  { category: 'xpathi',      cwe: 643 },
+  weak_random:      { category: 'weakrand',    cwe: 330 },
+  weak_hash:        { category: 'hash',        cwe: 328 },
+  weak_crypto:      { category: 'crypto',      cwe: 327 },
+  insecure_cookie:  { category: 'securecookie',cwe: 614 },
+  trust_boundary:   { category: 'trustbound',  cwe: 501 },
+  xxe:              { category: 'xxe',         cwe: 611 },
+  deserialization:  { category: 'deserialize', cwe: 502 },
+};
+
+/**
+ * Format results as an OWASP Benchmark CSV for use with BenchmarkUtils scorecard generators.
+ *
+ * Output columns: test name, category, CWE, real vulnerability
+ * One row per detected (testName, category) pair — `true` means Cognium flagged it.
+ * Files with no matching findings are omitted; BenchmarkUtils scores them as negatives.
+ */
+export function formatOWASPBenchmark(results: ScanResult[], crossFileData?: CrossFileData): string {
+  const rows: string[] = [];
+  const seen = new Set<string>();
+
+  for (const result of results) {
+    // Extract bare filename without extension (e.g. "BenchmarkTest00001" from full path)
+    const testName = result.file.replace(/\.java$/i, '').split(/[/\\]/).pop() ?? result.file;
+
+    for (const vuln of result.vulnerabilities) {
+      const mapping = OWASP_BENCHMARK_MAP[vuln.type];
+      if (!mapping) continue;
+
+      const key = `${testName},${mapping.category},${mapping.cwe},true`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        rows.push(key);
+      }
+    }
+  }
+
+  // Cross-file taint paths: attribute finding to the sink file
+  for (const p of (crossFileData?.taintPaths ?? [])) {
+    const mapping = OWASP_BENCHMARK_MAP[p.sink.type];
+    if (!mapping) continue;
+
+    const testName = p.sink.file.replace(/\.java$/i, '').split(/[/\\]/).pop() ?? p.sink.file;
+    const key = `${testName},${mapping.category},${mapping.cwe},true`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      rows.push(key);
+    }
+  }
+
+  rows.sort();
+  return ['# test name,category,CWE,real vulnerability', ...rows].join('\n') + '\n';
+}
+
 export function formatSARIF(results: ScanResult[], crossFileData?: CrossFileData): string {
   const sarif = {
     $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',

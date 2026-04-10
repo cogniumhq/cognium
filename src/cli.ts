@@ -13,7 +13,7 @@ import {
   type PassOptions,
 } from 'circle-ir';
 import {
-  formatResults, formatJSON, formatSARIF,
+  formatResults, formatJSON, formatSARIF, formatOWASPBenchmark,
   SINK_SEVERITY, SINK_CWE,
   type ScanResult, type CrossFileData,
 } from './formatters.js';
@@ -218,7 +218,7 @@ const LANG_MAP: Record<string, string> = {
 
 interface ScanOptions {
   language?: string;
-  format: 'text' | 'json' | 'sarif';
+  format: 'text' | 'json' | 'sarif' | 'owasp-benchmark';
   threads: number;
   severity?: string;
   category?: string;
@@ -743,6 +743,9 @@ async function runScan(targetPath: string, options: ScanOptions): Promise<void> 
         case 'sarif':
           output = formatSARIF(results, crossFileData);
           break;
+        case 'owasp-benchmark':
+          output = formatOWASPBenchmark(results, crossFileData);
+          break;
         default:
           output = formatResults(results, options.verbose, crossFileData);
       }
@@ -1144,7 +1147,7 @@ async function main(): Promise<void> {
     const targetPath = args[0];
     const scanOptions: ScanOptions = {
       language: (options.language || options.l) ? normalizeLanguage((options.language || options.l) as string) : undefined,
-      format: (options.format || options.f || 'text') as 'text' | 'json' | 'sarif',
+      format: (options.format || options.f || 'text') as 'text' | 'json' | 'sarif' | 'owasp-benchmark',
       threads: parseInt((options.threads as string) || '4', 10),
       severity: (options.severity) as string | undefined,
       category: (options.category) as string | undefined,
