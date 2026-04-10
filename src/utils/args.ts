@@ -71,7 +71,7 @@ COMMANDS:
 
 SCAN OPTIONS:
   -l, --language <lang>      Scan only files for language (bash|java|javascript|typescript|python|rust)
-  -f, --format <format>      Output format (text|json|sarif) [default: text]
+  -f, --format <format>      Output format (text|json|sarif|owasp-benchmark) [default: text]
   --threads <n>              Parallel analysis threads [default: 4]
   --severity <level>         Filter by severity:
                                - Single level: minimum severity (e.g., "high" shows high+critical)
@@ -109,6 +109,7 @@ EXAMPLES:
   cognium scan . --exclude-cwe CWE-330,CWE-327
   cognium scan . --disable-pass naming-convention,todo-in-prod
   cognium scan . --profile custom-config.json
+  cognium scan BenchmarkJava/src/ -f owasp-benchmark -o cognium_results.csv
   cognium metrics src/
   cognium metrics src/ --category complexity
   cognium metrics src/ --format json --profile custom-config.json
