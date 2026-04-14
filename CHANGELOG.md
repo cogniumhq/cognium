@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-13
+
+### Added
+
+- **HTML file scanning** — `cognium scan` now picks up `.html` and `.htm` files
+  and analyzes them via circle-ir's new web extraction preprocessor:
+  - Inline `<script>` blocks analyzed as JavaScript with correct line mapping
+  - 8 HTML attribute-level security checks (missing noopener, javascript: URIs,
+    missing sandbox/SRI, mixed content, autocomplete on passwords, etc.)
+
+### Changed
+
+- **circle-ir upgraded 3.16.8 → 3.17.0** — adds HTML language support
+
+[1.5.0]: https://github.com/cogniumhq/cognium/compare/v1.4.6...v1.5.0
+
 ## [1.4.6] - 2026-04-08
 
 ### Changed

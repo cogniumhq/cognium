@@ -214,6 +214,8 @@ const LANG_MAP: Record<string, string> = {
   '.rs': 'rust',
   '.sh': 'bash',
   '.bash': 'bash',
+  '.html': 'html',
+  '.htm': 'html',
 };
 
 interface ScanOptions {
