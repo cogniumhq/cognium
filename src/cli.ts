@@ -493,6 +493,7 @@ async function initWasm(spin: Spinner | null): Promise<void> {
           typescript: join(wasmDir, 'tree-sitter-javascript.wasm'),
           python: join(wasmDir, 'tree-sitter-python.wasm'),
           rust: join(wasmDir, 'tree-sitter-rust.wasm'),
+          html: join(wasmDir, 'tree-sitter-html.wasm'),
         }
       });
     } else {
@@ -518,6 +519,7 @@ async function initWasm(spin: Spinner | null): Promise<void> {
         typescript: wasmBasePath + 'tree-sitter-javascript.wasm',
         python: wasmBasePath + 'tree-sitter-python.wasm',
         rust: wasmBasePath + 'tree-sitter-rust.wasm',
+        html: wasmBasePath + 'tree-sitter-html.wasm',
       }
     });
   }

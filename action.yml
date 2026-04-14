@@ -1,5 +1,5 @@
 name: 'Cognium Security Scan'
-description: 'Semantic static analysis for security vulnerabilities via taint tracking. Supports Java, JavaScript, TypeScript, Python, Rust, and Bash.'
+description: 'Semantic static analysis for security vulnerabilities via taint tracking. Supports Java, JavaScript, TypeScript, Python, Rust, Bash, and HTML.'
 author: 'Cognium Labs'
 
 branding:
