@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-04-15
+
+### Changed
+
+- **circle-ir upgraded 3.17.3 → 3.18.0** — adds taint sources/sinks/sanitizers from benchmark report: JS (jQuery XSS, postMessage, document.referrer, JSON.parse/URL sanitizers), Java (CORS CWE-942, Guava Escaper), Rust (stdin, Axum Body, Warp html, redirect sinks), Bash (curl/wget supply-chain sources)
+
+[1.6.0]: https://github.com/cogniumhq/cognium/compare/v1.5.5...v1.6.0
+
 ## [1.5.5] - 2026-04-14
 
 ### Changed
