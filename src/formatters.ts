@@ -68,8 +68,8 @@ export const SINK_CWE: Record<SinkType, string> = {
   code_injection: 'CWE-94',
   log_injection: 'CWE-117',
   weak_random: 'CWE-330',
-  weak_hash: 'CWE-327',
-  weak_crypto: 'CWE-327',
+  weak_hash: 'CWE-328',    // Use of Weak Hash (MD5, SHA-1, etc.)
+  weak_crypto: 'CWE-327',  // Use of Broken/Risky Cryptographic Algorithm
   insecure_cookie: 'CWE-614',
   trust_boundary: 'CWE-501',
   external_taint_escape: 'CWE-20',

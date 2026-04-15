@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-04-14
+
+### Fixed
+
+- **weak_hash CWE mapping** (fixes #13): Changed `weak_hash` sink type from CWE-327 to CWE-328 (Use of Weak Hash). CWE-327 is for broken cryptographic algorithms (DES, RC4), while CWE-328 is specifically for weak hash functions (MD5, SHA-1). This fixes OWASP Benchmark scoring discrepancies when using strict CWE matching.
+
+[1.5.2]: https://github.com/cogniumhq/cognium/compare/v1.5.1...v1.5.2
+
 ## [1.5.1] - 2026-04-14
 
 ### Changed
