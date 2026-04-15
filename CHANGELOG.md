@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-04-15
+
+### Fixed
+
+- **circle-ir upgraded 3.18.2 → 3.18.3** — fixes property-based taint source matching (location.hash, event.data, document.referrer now correctly detected); fixes invalid SourceType values in JS configs
+
+[1.6.3]: https://github.com/cogniumhq/cognium/compare/v1.6.2...v1.6.3
+
 ## [1.6.2] - 2026-04-15
 
 ### Changed
