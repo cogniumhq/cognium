@@ -5,7 +5,8 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { stat, readdir } from 'fs/promises';
-import { join, extname, resolve, relative } from 'path';
+import { join, dirname, extname, resolve, relative } from 'path';
+import { createRequire } from 'module';
 import {
   initAnalyzer, analyze, analyzeProject,
   type SinkType, type SastFinding, type SupportedLanguage,
@@ -509,7 +510,12 @@ async function initWasm(spin: Spinner | null): Promise<void> {
       process.exit(2);
     }
   } else {
-    const wasmBasePath = new URL('../node_modules/circle-ir/dist/wasm/', import.meta.url).pathname;
+    // Use createRequire to locate circle-ir's actual package directory.
+    // This works regardless of npm hoisting structure (unlike import.meta.url
+    // relative paths, which break when bun bundles the code).
+    const require = createRequire(import.meta.url);
+    const circleIrPkg = require.resolve('circle-ir/package.json');
+    const wasmBasePath = join(dirname(circleIrPkg), 'dist', 'wasm') + '/';
     await initAnalyzer({
       wasmPath: wasmBasePath + 'web-tree-sitter.wasm',
       languagePaths: {

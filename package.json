@@ -1,6 +1,6 @@
 {
   "name": "cognium",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Semantic static analysis engine for detecting security vulnerabilities via taint tracking",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -65,7 +65,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "circle-ir": "^3.17.1"
+    "circle-ir": "^3.17.2"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

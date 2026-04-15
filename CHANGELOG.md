@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-04-14
+
+### Fixed
+
+- **WASM path resolution when installed via npm** (fixes #11): Replaced `import.meta.url` relative path with `createRequire` to locate circle-ir's `dist/wasm/` directory. The old approach broke when bun bundled the code because `import.meta.url` pointed to cognium's `dist/cli.js` rather than circle-ir's actual location, and npm hoisting placed circle-ir at a different `node_modules` level.
+
+### Changed
+
+- **circle-ir upgraded 3.17.1 → 3.17.2** — adds `dist/wasm/` to WASM auto-detection fallback chain
+
+[1.5.3]: https://github.com/cogniumhq/cognium/compare/v1.5.2...v1.5.3
+
 ## [1.5.2] - 2026-04-14
 
 ### Fixed
