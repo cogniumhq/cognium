@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.3] - 2026-04-14
+## [1.5.4] - 2026-04-14
 
 ### Fixed
 
@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **circle-ir upgraded 3.17.1 → 3.17.2** — adds `dist/wasm/` to WASM auto-detection fallback chain
+
+[1.5.4]: https://github.com/cogniumhq/cognium/compare/v1.5.3...v1.5.4
+
+## [1.5.3] - 2026-04-14
+
+### Changed
+
+- **circle-ir upgraded 3.17.1 → 3.17.2** — fixes WASM auto-detection in nested node_modules (#11)
 
 [1.5.3]: https://github.com/cogniumhq/cognium/compare/v1.5.2...v1.5.3
 
