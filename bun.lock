@@ -4,7 +4,7 @@
     "": {
       "name": "cognium",
       "dependencies": {
-        "circle-ir": "^3.18.5",
+        "circle-ir": "^3.19.5",
       },
       "devDependencies": {
         "@types/node": "^25.5.0",
@@ -18,7 +18,7 @@
 
     "bun-types": ["bun-types@1.3.11", "", { "dependencies": { "@types/node": "*" } }, "sha512-1KGPpoxQWl9f6wcZh57LvrPIInQMn2TQ7jsgxqpRzg+l0QPOFvJVH7HmvHo/AiPgwXy+/Thf6Ov3EdVn1vOabg=="],
 
-    "circle-ir": ["circle-ir@3.18.5", "", { "dependencies": { "web-tree-sitter": "^0.26.7", "yaml": "^2.8.3" } }, "sha512-moZoJzFcjLDG5qjhlYSgRGjIMWl1oPrzx/qKpdE85y9bru1HgDR1VhfxtLfRhY5LylAbNWCTygwN0roqdP+KgQ=="],
+    "circle-ir": ["circle-ir@3.19.5", "", { "dependencies": { "web-tree-sitter": "^0.26.7", "yaml": "^2.8.3" } }, "sha512-VyN0Gi2PO1iitRV1cyI974JIfhSgAx/ErQE4RYLv5R4Ax9G7ctbF8B0Y27cj9roLuR87SXSK7aQqLn59PAKfQw=="],
 
     "typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
 
